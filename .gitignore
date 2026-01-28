@@ -1,0 +1,29 @@
+# Environments
+.env
+.env.local
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+ENV/
+
+# Data Files (Persistent storage)
+*.json
+!active_captchas.json
+!guild_inviters.json
+!levels.json
+!portfolios.json
+!warnings.json
+!yt_cooldowns.json
+# Note: In a production environment, you should use a database instead of JSON files.
+# If you want to keep the data between deployments on Railway, 
+# you might want to ignore these and use an external DB.
+
+# OS
+.DS_Store
+Thumbs.db

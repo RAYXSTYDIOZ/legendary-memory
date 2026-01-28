@@ -4,3 +4,4 @@ aiohttp
 Pillow
 bing-image-downloader
 python-dotenv
+requests

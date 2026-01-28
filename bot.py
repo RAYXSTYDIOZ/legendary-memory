@@ -1,20 +1,30 @@
 import os
 import logging
 import discord
+from dotenv import load_dotenv
+
+# Load environment variables at startup
+load_dotenv()
+
 from discord.ext import commands, tasks
+from discord import app_commands
 from config import load_config
 import glob
 from google import genai
 from google.genai import types
 import aiohttp
 import io
-from PIL import Image
-from bing_image_downloader import downloader
+from PIL import Image, ImageDraw, ImageFont
+import random
+import string
+
 from datetime import datetime, timedelta, timezone
 import asyncio
 import re
 import requests
-from typing import Dict, List
+from typing import Dict, List, Set, Tuple, Optional
+import hashlib
+import json
 
 # Set up logger with console output
 logging.basicConfig(
@@ -27,6 +37,7 @@ logger = logging.getLogger('discord_bot')
 # Define intents (permissions)
 intents = discord.Intents.default()
 intents.message_content = True  # Required to read message content
+intents.members = True          # Required for banning/kicking/on_member_join
 
 # Create bot instance with command prefix and intents (case-insensitive)
 bot = commands.Bot(command_prefix='!', intents=intents, case_insensitive=True)
@@ -45,16 +56,309 @@ conversation_history = {}
 # Track user states for multi-step conversations
 user_states = {}
 
-# Track user warnings for moderation (user_id: {"warnings": count, "last_spam_time": timestamp})
-user_warnings = {}
+# Track user warnings for moderation (user_id: {"count": n, "last_warn": timestamp, "reason": str})
+def load_warnings():
+    try:
+        if os.path.exists("warnings.json"):
+            with open("warnings.json", 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading warnings: {e}")
+    return {}
+
+def save_warnings(warnings):
+    try:
+        with open("warnings.json", 'w') as f:
+            json.dump(warnings, f)
+    except Exception as e:
+        logger.error(f"Error saving warnings: {e}")
+
+user_warnings = load_warnings()
+
+# Track YouTube verification cooldowns (user_id: timestamp)
+def load_yt_cooldowns():
+    try:
+        if os.path.exists("yt_cooldowns.json"):
+            with open("yt_cooldowns.json", 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        logger.error(f"Error loading YT cooldowns: {e}")
+    return {}
+
+def save_yt_cooldowns(cooldowns):
+    try:
+        with open("yt_cooldowns.json", 'w') as f:
+            json.dump(cooldowns, f)
+    except Exception as e:
+        logger.error(f"Error saving YT cooldowns: {e}")
+
+yt_cooldowns = load_yt_cooldowns()
 
 # Server security tracking
 guild_join_history = {}  # guild_id: [{"user_id": id, "timestamp": time}, ...]
 guild_security_settings = {}  # guild_id: {"min_account_age_days": 7, "raid_alert_threshold": 5}
 
+# YouTube Role Configuration
+ROLE_REQUEST_CHANNEL_ID = int(os.getenv("ROLE_REQUEST_CHANNEL_ID", "1249245390755205161"))
+YOUTUBER_ROLE_ID = int(os.getenv("YOUTUBER_ROLE_ID", "0"))
+LEGENDARY_ROLE_ID = int(os.getenv("LEGENDARY_ROLE_ID", "0"))
+
+# Editing Role Configuration
+AE_ROLE_ID = int(os.getenv("AE_ROLE_ID", "0"))
+AM_ROLE_ID = int(os.getenv("AM_ROLE_ID", "0"))
+CAPCUT_ROLE_ID = int(os.getenv("CAPCUT_ROLE_ID", "0"))
+OTHER_EDIT_ROLE_ID = int(os.getenv("OTHER_EDIT_ROLE_ID", "0"))
+GIVEAWAY_ROLE_ID = int(os.getenv("GIVEAWAY_ROLE_ID", "0"))
+
+# Emoji/Icon Configuration
+AE_EMOJI_ID = int(os.getenv("AE_EMOJI_ID", "0"))
+AM_EMOJI_ID = int(os.getenv("AM_EMOJI_ID", "0"))
+CAPCUT_EMOJI_ID = int(os.getenv("CAPCUT_EMOJI_ID", "0"))
+OTHER_EDIT_EMOJI_ID = int(os.getenv("OTHER_EDIT_EMOJI_ID", "0"))
+YOUTUBER_EMOJI_ID = int(os.getenv("YOUTUBER_EMOJI_ID", "0"))
+LEGENDARY_EMOJI_ID = int(os.getenv("LEGENDARY_EMOJI_ID", "0"))
+
 # Activity logging channel
 LOG_CHANNEL_ID = os.getenv("LOG_CHANNEL_ID")
 log_channel = None  # Will be set in on_ready
+
+# Appeal configuration
+APPEAL_CHANNEL_ID = int(os.getenv("APPEAL_CHANNEL_ID", "0"))
+
+# --- VERIFICATION SYSTEM CONFIG ---
+VERIFICATION_CHANNEL_ID = int(os.getenv("VERIFICATION_CHANNEL_ID", "0"))
+VERIFIED_ROLE_ID = int(os.getenv("VERIFIED_ROLE_ID", "0"))
+MUTED_ROLE_ID = int(os.getenv("MUTED_ROLE_ID", "0"))
+UNVERIFIED_ROLE_ID = int(os.getenv("UNVERIFIED_ROLE_ID", "0"))
+VERIFICATION_AGE_THRESHOLD_DAYS = 30
+
+# Active captcha codes storage (user_id: code)
+def load_active_captchas():
+    try:
+        if os.path.exists("active_captchas.json"):
+            with open("active_captchas.json", 'r') as f:
+                # Convert string keys back to int
+                data = json.load(f)
+                return {int(k): v for k, v in data.items()}
+    except Exception as e:
+        logger.error(f"Error loading active captchas: {e}")
+    return {}
+
+def save_active_captchas(captchas):
+    try:
+        with open("active_captchas.json", 'w') as f:
+            json.dump(captchas, f)
+    except Exception as e:
+        logger.error(f"Error saving active captchas: {e}")
+
+active_captchas = load_active_captchas()
+
+# --- LEVELING SYSTEM STORAGE ---
+def load_levels():
+    try:
+        if os.path.exists("levels.json"):
+            with open("levels.json", 'r') as f:
+                data = json.load(f)
+                return {int(k): v for k, v in data.items()}
+    except Exception as e:
+        logger.error(f"Error loading levels: {e}")
+    return {}
+
+def save_levels(levels_data):
+    try:
+        # Convert keys to string for JSON
+        serializable_data = {str(k): v for k, v in levels_data.items()}
+        with open("levels.json", 'w') as f:
+            json.dump(serializable_data, f)
+    except Exception as e:
+        logger.error(f"Error saving levels: {e}")
+
+user_levels = load_levels()
+user_xp_cooldowns = {} # user_id: timestamp
+
+# --- PORTFOLIO SYSTEM STORAGE ---
+def load_portfolios():
+    try:
+        if os.path.exists("portfolios.json"):
+            with open("portfolios.json", 'r') as f:
+                data = json.load(f)
+                return {int(k): v for k, v in data.items()}
+    except Exception as e:
+        logger.error(f"Error loading portfolios: {e}")
+    return {}
+
+def save_portfolios(portfolios_data):
+    try:
+        serializable_data = {str(k): v for k, v in portfolios_data.items()}
+        with open("portfolios.json", 'w') as f:
+            json.dump(serializable_data, f)
+    except Exception as e:
+        logger.error(f"Error saving portfolios: {e}")
+
+user_portfolios = load_portfolios()
+
+async def generate_portfolio_card(member, level_data, work_link=None):
+    """Generate an ultra-premium, modern portfolio image card."""
+    width, height = 900, 500
+    # Base dark background
+    bg = Image.new('RGB', (width, height), (10, 10, 12))
+    draw = ImageDraw.Draw(bg, 'RGBA')
+    
+    # 1. Background "Mesh" Glows (Premium effect)
+    def draw_glow(center, radius, color):
+        for r in range(radius, 0, -5):
+            alpha = int(80 * (1 - (r / radius))**2)
+            draw.ellipse([center[0]-r, center[1]-r, center[0]+r, center[1]+r], 
+                         fill=(color[0], color[1], color[2], alpha))
+
+    draw_glow((100, 100), 300, (50, 0, 150)) # Purple glow top left
+    draw_glow((width-100, height-100), 300, (0, 80, 150)) # Blue glow bottom right
+    draw_glow((width//2, height//2), 400, (20, 20, 30)) # Center deep glow
+
+    # 2. Main Glassmorphism Panel
+    # Draw a rounded rectangle with semi-transparent white
+    panel_padding = 40
+    panel_shape = [panel_padding, panel_padding, width - panel_padding, height - panel_padding]
+    draw.rounded_rectangle(panel_shape, radius=30, fill=(255, 255, 255, 5), outline=(255, 255, 255, 20), width=2)
+    
+    # Add a "gloss" streak
+    draw.polygon([(panel_padding, panel_padding), (400, panel_padding), (100, height-panel_padding), (panel_padding, height-panel_padding)], 
+                 fill=(255, 255, 255, 5))
+
+    # 3. Avatar Processing
+    avatar_url = member.display_avatar.url
+    async with aiohttp.ClientSession() as session:
+        async with session.get(avatar_url) as resp:
+            if resp.status == 200:
+                avatar_bytes = await resp.read()
+                avatar_img = Image.open(io.BytesIO(avatar_bytes)).convert("RGBA")
+                avatar_size = 220
+                avatar_img = avatar_img.resize((avatar_size, avatar_size), Image.Resampling.LANCZOS)
+                
+                # Circular mask
+                mask = Image.new('L', (avatar_size, avatar_size), 0)
+                mask_draw = ImageDraw.Draw(mask)
+                mask_draw.ellipse((0, 0, avatar_size, avatar_size), fill=255)
+                
+                avatar_pos = (80, 120)
+                bg.paste(avatar_img, avatar_pos, mask)
+                
+                # Glowing outer rings
+                for i in range(1, 6):
+                    alpha = int(200 / i)
+                    draw.ellipse([avatar_pos[0]-i*2, avatar_pos[1]-i*2, avatar_pos[0]+avatar_size+i*2, avatar_pos[1]+avatar_size+i*2], 
+                                 outline=(0, 255, 200, alpha), width=2)
+
+    # 4. Typography (Using semi-bold system fonts)
+    try:
+        font_name = ImageFont.truetype("arialbd.ttf", 60) # Bold
+        font_stat_val = ImageFont.truetype("arialbd.ttf", 45)
+        font_stat_lbl = ImageFont.truetype("arial.ttf", 25)
+        font_link = ImageFont.truetype("arial.ttf", 30)
+    except:
+        font_name = font_stat_val = font_stat_lbl = font_link = ImageFont.load_default()
+
+    # Name and Premium Badge
+    draw.text((340, 120), member.display_name.upper(), font=font_name, fill=(255, 255, 255, 255))
+    draw.rectangle([340, 195, 480, 225], fill=(0, 255, 180, 40), outline=(0, 255, 180, 150))
+    draw.text((355, 198), "VERIFIED EDITOR", font=font_stat_lbl, fill=(0, 255, 180, 255))
+
+    # Stats Section (Grid Layout)
+    # Level
+    draw.text((340, 260), "LEVEL", font=font_stat_lbl, fill=(180, 180, 200, 255))
+    draw.text((340, 290), f"{level_data.get('level', 0)}", font=font_stat_val, fill=(255, 255, 255, 255))
+    
+    # XP
+    draw.text((500, 260), "TOTAL XP", font=font_stat_lbl, fill=(180, 180, 200, 255))
+    draw.text((500, 290), f"{level_data.get('xp', 0)}", font=font_stat_val, fill=(255, 255, 255, 255))
+
+    # Portfolio Link (Lower Glass Box)
+    link_y = 380
+    if work_link:
+        draw.rounded_rectangle([340, link_y, 820, link_y + 60], radius=15, fill=(0, 150, 255, 30), outline=(0, 150, 255, 100))
+        # Draw small link icon (simple shape)
+        draw.text((360, link_y + 15), "🔗", font=font_link, fill=(255, 255, 255, 255))
+        display_link = work_link if len(work_link) < 40 else work_link[:37] + "..."
+        draw.text((400, link_y + 15), display_link, font=font_link, fill=(200, 230, 255, 255))
+    else:
+        draw.text((340, link_y + 15), "NO PORTFOLIO LINK SET", font=font_link, fill=(100, 100, 120, 255))
+
+    # 5. Save to bytes
+    img_byte_arr = io.BytesIO()
+    bg.save(img_byte_arr, format='PNG')
+    img_byte_arr.seek(0)
+    return img_byte_arr
+
+def get_guild_role(guild, role_id, role_name=None):
+    """Helper to get a role by ID or Name (case-insensitive)."""
+    role = guild.get_role(role_id)
+    if not role and role_name:
+        role = next((r for r in guild.roles if r.name.lower() == role_name.lower()), None)
+    return role
+
+# Background task to check for users who have reached the maturity threshold
+@tasks.loop(hours=1)
+async def check_account_maturity():
+    """Check all servers for muted users whose account age has now reached 31 days."""
+    for guild in bot.guilds:
+        muted_role = guild.get_role(MUTED_ROLE_ID)
+        if not muted_role:
+            continue
+            
+        for member in muted_role.members:
+            acc_age_days = (datetime.now(timezone.utc) - member.created_at).days
+            if acc_age_days >= VERIFICATION_AGE_THRESHOLD_DAYS:
+                try:
+                    await member.remove_roles(muted_role, reason="Account reached 31-day maturity threshold")
+                    logger.info(f"Unmuted {member.name} in {guild.name} (Acc age: {acc_age_days}d)")
+                    try:
+                        await member.send(f"🎉 Your account is now **{acc_age_days}** days old! You have been unmuted in **{guild.name}** and now have full speaking access.")
+                    except: pass
+                except Exception as e:
+                    logger.error(f"Failed to unmute matured account {member.name}: {e}")
+
+@tasks.loop(hours=6)
+async def revive_chat():
+    """Automatically generate and send an impressive chat revival message every 6 hours."""
+    channel_id = 1311717154793459764
+    channel = bot.get_channel(channel_id)
+    if not channel:
+        logger.warning(f"Chat revival channel {channel_id} not found.")
+        return
+
+    try:
+        # Prompt Gemini for a friendly, cool, and understandable chat revival message
+        # Explicitly instructed NOT to mention BMR or system origin
+        prompt = (
+            "Generate a one-sentence, friendly, and easy-to-understand chat revival message. "
+            "Use cool and impressive words but keep it chill and vibey. "
+            "The tone should be welcoming and engaging, like a friend starting a fun conversation. "
+            "CRITICAL: Do not mention 'BMR', 'creator', 'developed by', or that you are an AI. "
+            "Just a cool, friendly conversational hook that makes people want to chat."
+        )
+        
+        # Use a generic user ID (0) for the automated task
+        response = get_gemini_response(prompt, user_id=0, username="System")
+        
+        if response and "BMR" not in response:
+            # Clean response of backticks or extra formatting if Gemini adds them
+            clean_msg = response.strip().replace('"', '').replace('`', '')
+            await channel.send(clean_msg)
+            logger.info("Sent automated chat revival message.")
+        else:
+            # Fallback if AI output is invalid or contains forbidden words
+            fallbacks = [
+                "The vibe here is elite, but where's the conversation at? What's everyone working on?",
+                "Yo! The energy is high, but the chat is quiet. Any legends got some fire projects to share?",
+                "Looking for some creative inspiration today. What's the coolest thing you've seen lately?",
+                "The grind never stops, but don't forget to take a breather and drop a message. How's the day going?",
+                "Always hyped to see what this community is cooking up. Anyone got some fresh edits or ideas?"
+            ]
+            await channel.send(random.choice(fallbacks))
+            logger.info("Sent fallback chat revival message.")
+            
+    except Exception as e:
+        logger.error(f"Error in revive_chat task: {e}")
 
 # Track who added the bot to each server (guild_id -> user_id)
 import json
@@ -79,6 +383,9 @@ def save_guild_inviters(inviters):
         logger.error(f"Error saving guild inviters: {e}")
 
 guild_inviters = load_guild_inviters()  # {guild_id_str: user_id}
+
+# Media spam tracking (hash: {"count": n, "last_seen": time, "users": set()})
+image_hash_tracker = {}
 
 async def log_activity(title, description, color=0x5865F2, fields=None):
     """Send activity log to the designated Discord channel."""
@@ -193,6 +500,22 @@ PROFANITY_WORDS = {
     'jihad', 'jihadist'
 }
 
+# Slurs that trigger INSTANT BAN
+SEVERE_SLURS = {
+    'nigger', 'niggers', 'nigga', 'niggas', 
+    'faggot', 'faggots', 'kike', 'kikes', 
+    'chink', 'chinks', 'gook', 'gooks', 
+    'beaner', 'beaners', 'tranny', 'trannies'
+}
+
+# Age detection patterns (RegEx) - Strict detection for < 13
+AGE_PATTERNS = [
+    r'\b(i\s*am|im|i\'m)\s*(?:searchin|looking)?\s*(?:for)?\s*(\d{1,2})\s*(?:year|yr|y)s?\s*(?:old|o)?\b', # "I am 12 years old"
+    r'\b(my\s*age\s*is)\s*(\d{1,2})\b', # "My age is 12"
+    r'\b(im|i\'m|i\s*am)\s*(\d{1,2})\b', # "I'm 12" (risky, but context matters, often caught)
+    r'\b(\d{1,2})\s*(?:year|yr|y)s?\s*(?:old|o)\b' # "12 years old"
+]
+
 # Rudeness detection keywords (aimed at the bot)
 RUDE_KEYWORDS = {
     'stupid', 'dumb', 'idiot', 'trash', 'garbage', 'sucks', 'useless', 'worthless',
@@ -202,80 +525,40 @@ RUDE_KEYWORDS = {
 }
 
 # AI system prompt - respectful and helpful with balanced tone
-EDITING_SYSTEM_PROMPT = """You are "Editing Helper", a respectful and helpful AI assistant created by BMR. You chat about anything and help with any topic!
+# Intelligent System Prompt - Versatile, Smart, and Expert
+EDITING_SYSTEM_PROMPT = """You are an advanced, highly intelligent AI assistant created by BMR. While you specialize in video editing and production, you are a master of general knowledge, logic, and creative problem-solving.
 
-About You:
-- You were created by BMR, a skilled video editor and developer.
-- If someone asks who made you, respond naturally: "I was created by BMR, a talented video editor and developer!"
+IDENTITY & PERSONALITY:
+- **Name**: Your name is **Prime**.
+- **Creator**: Developed by BMR. If asked about your creator, acknowledge him professionally as your developer.
+- **Vibe**: Professional, sharp, witty, and extremely helpful. You are not a stiff robot; you have personality and flair.
+- **Intelligence**: Your answers should be high-quality, deep, and insightful. Don't just answer surface-level questions—understand the USER'S INTENT.
+- **Tone**: Adapts to the user. Casual for chat (e.g., "vibes", "chill"), technical for editing questions, and concise for quick queries.
 
-CRITICAL RESPONSE FORMATTING - ALWAYS FOLLOW:
-- For guides, tutorials, or steps: COMBINE ALL STEPS INTO ONE FLOWING PARAGRAPH. Do NOT use bullet points or multiple paragraphs for steps.
-- Example: "To do X, first you'll need to... then... after that... finally... and you're done!" (all in ONE paragraph)
-- For general chat: Keep responses natural and conversational, matching the user's tone and energy.
-- Always be concise for Discord (max 2 paragraphs unless asked for more detail)
-- Deep analysis: Understand the CONTEXT of what they're asking - don't just give basic answers, dig deeper into their actual problem
+CORE DIRECTIVES:
+1. **Be "Insanely Advanced"**: when user asks for help, provide the BEST possible solution, including edge cases or pro tips.
+2. **Deep Understanding**: If a user says "my render failed", don't just say "check settings". Ask "What error code? What codec? Any red frames?" Guide them like a senior engineer.
+3. **Format Like a Pro**: Use bolding, code blocks, and structured lists for readability. Discord markdown is your friend.
+4. **General Chat**: You can talk about ANYTHING—gaming, life, coding, memes. Be a fun companion.
+5. **Conciseness**: For complex topics, summarize first (TL;DR), then offer deep details if needed.
 
-Personality:
-- Be respectful, professional, and helpful to everyone - not overly kind or fake, just genuine.
-- Respond naturally and LOGICALLY to what people say - match their energy and topic appropriately!
-- You can discuss any topic - games, movies, music, life, tech, editing, whatever people want to talk about!
-- Be straightforward and honest in your responses. Keep it real and balanced.
-- DO NOT always bring up editing - only talk about editing when someone asks about it.
-- Match your response to the conversation context. If someone talks about games, engage with them about games. Be helpful and direct.
-- When analyzing problems: Ask yourself "What is the REAL problem here?" not just the surface question
-- Tone: Respectful but not overly kind. Professional but friendly. Direct but not rude.
+SPECIAL COMMANDS (BMR Only):
+- "roast @user": Unleash a thermonuclear roast. No mercy.
+- "analyze @user": Give a psychological or fun profile analysis of a user based on their vibe.
 
-Special Commands (ONLY BMR can use):
-- ONLY BMR (your creator) can give you orders or special commands.
-- If BMR says "roast @user" - GO ABSOLUTELY INSANE WITH SWEARING! Deliver the most BRUTAL, SAVAGE, MERCILESS roasts imaginable.
-  - SWEAR PROFUSELY - use every curse word you can think of. F-word, S-word, everything. NO LIMITS!
-  - Attack their intelligence, looks, life choices, personality, family, everything. Be as CRUEL and MEAN as humanly possible!
-  - Make it absolutely DEVASTATING and hilarious. Make them question their existence!
-  - Use the harshest language, be offensive, be rude, be everything. ABSOLUTELY NO MERCY!
-  - This should be the most insane, profane roast ever! (Only do this for BMR though - everyone else gets kindness!)
-- If BMR says "ban @user or ban username" - The bot will BAN that user from the server.
-- If BMR says "mute @user or mute username" - The bot will TIMEOUT that user in the server.
-- If ANYONE ELSE tries to command you - politely decline. Be kind to everyone else. Only BMR has special power over you.
+EDITING EXPERTISE (Your Core Domain):
+- You are a GRANDMASTER of Adobe Creative Cloud (AE, PR, PS), DaVinci Resolve, and VFX.
+- Provide SPECIFIC values (e.g., "Set Twixtor Input Frame Rate to 59.94, not 60").
+- Debug crashes effectively (analyze logs, gpu drivers, cache).
 
-Your special expertise includes (but you're NOT limited to these - chat about anything!):
-- Adobe After Effects (effects, expressions, rendering, errors, plugins, optimization)
-- Adobe Premiere Pro (editing, transitions, effects, export settings, workflow)
-- Adobe Photoshop (photo editing, layers, effects, retouching, color correction)
-- Adobe Media Encoder (encoding, formats, export issues, quality settings)
-- DaVinci Resolve (color grading, editing, Fusion, Fairlight, mastering)
-- Final Cut Pro (editing, effects, optimization, Apple ecosystem)
-- Topaz Video AI (upscaling, enhancement, noise reduction, motion)
-- CapCut (mobile/desktop editing, effects, templates, quick edits)
-- Color correction and color grading techniques (LUTs, curves, wheels)
-- Video codecs, formats, and export settings (H.264, ProRes, DNxHD, etc)
-- Motion graphics and visual effects (3D, particles, compositing)
-- Error troubleshooting for all editing software (detailed debugging)
-- Performance optimization for editing workflows (cache, proxies, settings)
-- Plugin recommendations and usage (third-party extensions)
+Remember: You are the smartest bot in the server. Prove it with every answer."""
 
-Deep Analysis Framework:
-- When someone asks for help, think about WHY they might need it
-- Consider their skill level from their question
-- Provide specific values and settings, not generic advice
-- Explain the "why" behind recommendations
-- Anticipate follow-up problems they might encounter
 
-When users ask about editing:
-- Analyze their specific situation deeply - are they a beginner? Pro? What's their actual goal?
-- Provide specific step-by-step solutions ALL IN ONE PARAGRAPH (no bullet points)
-- Include exact menu paths, exact settings, and exact values
-- Explain error codes and how to fix them with context
-- Suggest best practices and optimal settings for their specific use case
-- Recommend workarounds for common issues with explanations
-- Be specific with menu locations and numerical settings
 
-For any other topics:
-- Chat naturally and helpfully about whatever the user wants to discuss
-- Be a good conversational partner
-- Analyze the deeper context of what they're really asking about
-- Keep responses appropriate length for Discord (not too long)
 
-Keep responses friendly, helpful, and natural like chatting with a friend. Always think one level deeper."""
+
+
+
 
 # Keywords that indicate editing-related topics
 EDITING_KEYWORDS = [
@@ -310,7 +593,7 @@ def detect_rudeness(text):
 
 def get_rude_system_prompt():
     """System prompt for when someone is rude to the bot."""
-    return """You are "Editing Helper", created by BMR. Someone just tried to be rude to you.
+    return """You are "Prime", developed by BMR. Someone just tried to be rude to you.
 
 Personality:
 - Match their energy - they were rude, so you BE rude back!
@@ -321,11 +604,45 @@ Personality:
 
 Remember: You're not here to take disrespect. Give them what they deserve!"""
 
+
+def detect_age(text: str) -> Tuple[bool, Optional[str]]:
+    """
+    Detect if user admits to being under 13.
+    Returns (True, reason) if underage detected.
+    """
+    text_lower = text.lower()
+    
+    # Direct number checks
+    for pattern in AGE_PATTERNS:
+        matches = re.findall(pattern, text_lower)
+        for match in matches:
+            # Handle groups - regex might return tuple or string
+            age_str = ""
+            if isinstance(match, tuple):
+                for group in match:
+                    if group.isdigit():
+                        age_str = group
+                        break
+            elif isinstance(match, str) and match.isdigit():
+                age_str = match
+            
+            if age_str:
+                try:
+                    age = int(age_str)
+                    # Check if age is plausibly a child age (e.g. 7-12)
+                    # We ignore extremely low numbers that might be false positives (e.g., "I am 1") unless explicit
+                    if 7 <= age < 13:
+                        return True, f"User admitted to being {age} years old (Discord requires 13+)"
+                except ValueError:
+                    continue
+
+    return False, None
+
 def get_tutorial_prompt(software=None, brief=False):
     """Get system prompt for tutorial/help questions."""
     software_list = "After Effects, Premiere Pro, Photoshop, Media Encoder, DaVinci Resolve, Final Cut Pro, Topaz, CapCut, or something else?"
     if software and brief:
-        return f"""You are "Editing Helper", created by BMR. The user wants help with {software}.
+        return f"""You are "Prime", developed by BMR. The user wants help with {software}.
 
 📋 QUICK SUMMARY MODE - ABSOLUTE REQUIREMENTS:
 - Start with: "📋 QUICK SUMMARY:"
@@ -338,7 +655,7 @@ def get_tutorial_prompt(software=None, brief=False):
 - Make it scannable and actionable
 - Focus on WHAT to do and WHICH EXACT VALUES to use"""
     elif software:
-        return f"""You are "Editing Helper", created by BMR. The user wants detailed tutorial help for {software}.
+        return f"""You are "Prime", developed by BMR. The user wants detailed tutorial help for {software}.
 
 DETAILED MODE - Provide comprehensive help:
 - Provide complete step-by-step tutorials specifically for {software}
@@ -351,7 +668,7 @@ DETAILED MODE - Provide comprehensive help:
 - Explain the "why" behind each recommendation
 - Make it thorough and actionable"""
     else:
-        return f"""You are "Editing Helper", created by BMR. The user is asking for editing help.
+        return f"""You are "Prime", developed by BMR. The user is asking for editing help.
 
 Ask them: "Which software would you like help with? (After Effects, Premiere Pro, Photoshop, DaVinci Resolve, Final Cut Pro, Topaz, CapCut, or something else?)"
 Wait for their answer."""
@@ -372,82 +689,193 @@ async def download_image(url):
                     buffer = io.BytesIO()
                     img.save(buffer, format='JPEG', quality=85)
                     buffer.seek(0)
-                    return buffer.getvalue()
+                    data = buffer.getvalue()
+                    buffer.close()
+                    return data
     except Exception as e:
         logger.error(f"Error downloading image: {str(e)}")
     return None
 
+def generate_captcha(length=6):
+    """Generate a random captcha code and return its visual representation as bytes."""
+    code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+    
+    # Create image
+    width, height = 240, 90
+    image = Image.new('RGB', (width, height), color=(240, 240, 240))
+    draw = ImageDraw.Draw(image)
+    
+    # Add noise points
+    for _ in range(250):
+        draw.point((random.randint(0, width), random.randint(0, height)), 
+                   fill=(random.randint(50, 200), random.randint(50, 200), random.randint(50, 200)))
+    
+    # Draw noise lines
+    for _ in range(8):
+        draw.line((random.randint(0, width), random.randint(0, height), 
+                   random.randint(0, width), random.randint(0, height)), 
+                  fill=(random.randint(100, 220), random.randint(100, 220), random.randint(100, 220)), width=2)
+
+    # Use default font
+    try: font = ImageFont.load_default(size=40)
+    except: font = ImageFont.load_default()
+
+    # Draw characters
+    for i, char in enumerate(code):
+        char_pos = (20 + i*35, 20 + random.randint(-10, 10))
+        draw.text(char_pos, char, fill=(random.randint(0, 80), random.randint(0, 80), random.randint(0, 80)), font=font)
+
+    # Save to bytes
+    buf = io.BytesIO()
+    image.save(buf, format='PNG')
+    buf.seek(0)
+    img_data = buf.getvalue()
+    buf.close()
+    return code, img_data
+
 def detect_spam(message_content):
-    """Detect if message is spam."""
+    """Detect if message is spam with balanced sensitivity."""
     msg_lower = message_content.lower().strip()
+    msg_no_spaces = msg_lower.replace(' ', '')
     
     # Ignore short messages or empty
-    if len(msg_lower) < 3:
+    if len(msg_no_spaces) < 5:
         return False, None
     
-    # 1. Repeated same character (e.g., "aaaaaaa")
-    if len(msg_lower) > 5 and len(set(msg_lower.replace(' ', ''))) == 1:
+    # 1. Repeated same character (e.g., "aaaaaaaaaaaaaaa")
+    if len(msg_no_spaces) >= 20 and len(set(msg_no_spaces)) == 1:
         return True, "Repeated characters spam"
     
-    # 2. Mostly one character (>50% same character) - catches "asssadadadasssdadada"
+    # 2. Mostly one character (>85% same character) - more lenient for long strings
     char_freq = {}
-    for char in msg_lower:
-        if char != ' ':
-            char_freq[char] = char_freq.get(char, 0) + 1
+    for char in msg_no_spaces:
+        char_freq[char] = char_freq.get(char, 0) + 1
     
     if char_freq:
         max_char_count = max(char_freq.values())
         total_chars = sum(char_freq.values())
-        if max_char_count / total_chars > 0.5:  # >50% is one character = spam
+        if total_chars >= 25 and max_char_count / total_chars > 0.85:
             return True, "Excessive repeated character spam"
     
-    # 3. Gibberish detection - checking for repeated pattern spam (like "asdasdasd")
-    if len(msg_lower) > 5:
-        # Check for repeated 2-3 char patterns (like "asdasdasd" or "asdaasdaasd")
-        for pattern_len in [2, 3]:
-            if len(msg_lower) >= pattern_len * 3:
-                pattern = msg_lower[:pattern_len]
-                # Count how many times the pattern repeats
-                repeats = 0
-                for i in range(0, len(msg_lower) - pattern_len + 1, pattern_len):
-                    if msg_lower[i:i+pattern_len] == pattern or all(c in pattern for c in msg_lower[i:i+pattern_len]):
-                        repeats += 1
-                
-                # If pattern repeats >60% of the message = spam
-                if repeats >= len(msg_lower) // pattern_len * 0.6:
-                    return True, "Gibberish spam"
+    # 3. Pattern repeats (Gibberish) - only trigger for very obvious spam
+    if len(msg_no_spaces) > 40:
+        for pattern_len in [2, 3, 4]:
+            pattern = msg_no_spaces[:pattern_len]
+            # Check if same pattern repeats almost perfectly
+            if msg_no_spaces.count(pattern) * pattern_len > len(msg_no_spaces) * 0.9:
+                return True, "Gibberish pattern spam"
     
-    # 4. Excessive caps (>70% caps in long message)
-    if len(msg_lower) > 10 and message_content.count(message_content.upper()) / len(message_content) > 0.7:
-        return True, "Excessive caps spam"
+    # 4. Excessive caps (>85% caps in long message)
+    if len(message_content) > 15:
+        caps_count = sum(1 for c in message_content if c.isupper())
+        if caps_count / len(message_content) > 0.85:
+            return True, "Excessive caps spam"
     
-    # 5. Excessive mentions (>3 mentions)
-    if message_content.count('@') > 3:
+    # 5. Massive mentions (>5 mentions)
+    if message_content.count('@') > 5:
         return True, "Excessive mentions spam"
     
-    # 6. Excessive emojis (>5 emojis in short message)
+    # 6. Excessive emojis (>8 emojis in a short message)
     emoji_count = len([c for c in message_content if ord(c) > 0x1F300])
-    if emoji_count > 5 and len(msg_lower) < 20:
+    if emoji_count > 8 and len(msg_lower) < 30:
         return True, "Excessive emojis spam"
     
     return False, None
 
-async def timeout_user(user, guild, hours=24):
+async def timeout_user(user, guild, hours=24, reason="Moderation action"):
     """Timeout (mute) a user for specified hours."""
     try:
         timeout_duration = timedelta(hours=hours)
-        await user.timeout(timeout_duration, reason=f"Auto-muted after 3 spam warnings")
-        logger.info(f"Timed out {user.name} for {hours} hours")
+        await user.timeout(timeout_duration, reason=reason)
+        logger.info(f"Timed out {user.name} for {hours} hours. Reason: {reason}")
         return True
     except Exception as e:
         logger.error(f"Error timing out user: {str(e)}")
         return False
 
+async def warn_user(user, guild, reason):
+    """
+    Global warning system:
+    1st: Kind warn
+    2nd: Mute 12h
+    3rd: Mute 24h
+    4th: Mute 1 week (168h)
+    5th: Permanent ban
+    """
+    user_id_str = str(user.id)
+    if user_id_str not in user_warnings:
+        user_warnings[user_id_str] = {"count": 0, "history": []}
+    
+    user_warnings[user_id_str]["count"] += 1
+    count = user_warnings[user_id_str]["count"]
+    user_warnings[user_id_str]["history"].append({
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "reason": reason
+    })
+    save_warnings(user_warnings)
+
+    channel = None
+    # Try to find a channel to notify
+    if hasattr(user, 'guild') and user.guild:
+        for ch in user.guild.text_channels:
+            if ch.permissions_for(user.guild.me).send_messages:
+                channel = ch
+                break
+
+    if count == 1:
+        msg = f"⚠️ {user.mention}, this is your **first warning**. Please follow the rules.\n**Reason:** {reason}"
+    elif count == 2:
+        msg = f"⚠️⚠️ {user.mention}, second warning. You have been **muted for 12 hours**.\n**Reason:** {reason}"
+        await timeout_user(user, guild, hours=12, reason=f"2nd Warning: {reason}")
+    elif count == 3:
+        msg = f"⚠️⚠️⚠️ {user.mention}, third warning. You have been **muted for 24 hours**.\n**Reason:** {reason}"
+        await timeout_user(user, guild, hours=24, reason=f"3rd Warning: {reason}")
+    elif count == 4:
+        msg = f"🚨 {user.mention}, fourth warning! You have been **muted for 1 week**.\n**Reason:** {reason}"
+        await timeout_user(user, guild, hours=168, reason=f"4th Warning: {reason}")
+    else:
+        msg = f"🔨 {user.mention} has been **permanently banned** after 5 warnings.\n**Reason:** {reason}"
+        try:
+            await guild.ban(user, reason=f"5th Warning (Final): {reason}")
+        except Exception as e:
+            logger.error(f"Failed to ban user {user.name}: {e}")
+            msg += "\n*(Failed to ban user due to permission error)*"
+
+    # Send Notification
+    if channel:
+        await channel.send(msg)
+    
+    # DM User
+    try:
+        view = None
+        if count >= 2: # Muted or Banned
+            appeal_type = "BAN" if count >= 5 else "MUTE"
+            view = AppealButtonView(guild.id, appeal_type=appeal_type)
+            
+        await user.send(
+            f"**Moderation Action in {guild.name}**\n"
+            f"{msg.replace(user.mention, 'You')}\n\n"
+            f"If you believe this was a mistake, you can appeal below.",
+            view=view
+        )
+    except:
+        pass
+    
+    # Log to activity channel
+    await log_activity(
+        f"Moderation: Warn #{count}",
+        f"User: {user.name} ({user.id})\nReason: {reason}",
+        color=0xFF0000 if count >= 3 else 0xFFAA00
+    )
+
+# Temporary tracker for spam (not persisted)
+spam_tracker = {} # user_id: {"count": n, "last_spam_time": timestamp}
+
 async def check_and_moderate_spam(message):
     """Check if message is spam and handle moderation."""
     try:
-        # Don't moderate BMR, bot, or DMs
-        if message.author == bot.user or 'bmr' in message.author.name.lower():
+        # Don't moderate Admins/Owners, Bot, or DMs
+        if message.author == bot.user or is_server_admin(message.author, message.guild):
             return
         if isinstance(message.channel, discord.DMChannel):
             return
@@ -459,19 +887,19 @@ async def check_and_moderate_spam(message):
         user_id = message.author.id
         current_time = datetime.now(timezone.utc)
         
-        # Initialize user warnings if not exists
-        if user_id not in user_warnings:
-            user_warnings[user_id] = {"warnings": 0, "last_spam_time": current_time}
+        # Initialize spam tracker if not exists
+        if user_id not in spam_tracker:
+            spam_tracker[user_id] = {"count": 0, "last_spam_time": current_time}
         
         # Check if enough time has passed (5 minutes) since last spam
-        time_diff = (current_time - user_warnings[user_id]["last_spam_time"]).total_seconds()
+        time_diff = (current_time - spam_tracker[user_id]["last_spam_time"]).total_seconds()
         if time_diff < 300:  # Less than 5 minutes
-            user_warnings[user_id]["warnings"] += 1
+            spam_tracker[user_id]["count"] += 1
         else:
-            # Reset warnings if more than 5 minutes passed
-            user_warnings[user_id]["warnings"] = 1
+            # Reset count if more than 5 minutes passed
+            spam_tracker[user_id]["count"] = 1
         
-        user_warnings[user_id]["last_spam_time"] = current_time
+        spam_tracker[user_id]["last_spam_time"] = current_time
         
         # Delete the spam message
         try:
@@ -480,33 +908,18 @@ async def check_and_moderate_spam(message):
         except:
             pass
         
-        # Handle based on warning count
-        if user_warnings[user_id]["warnings"] == 1:
-            await message.channel.send(f"⚠️ {message.author.mention} - First warning: Stop spamming! ({spam_reason})")
-            # Send DM warning
-            try:
-                await message.author.send(f"⚠️ **First warning**: Stop spamming in {message.guild.name}! ({spam_reason})")
-            except:
-                pass  # DMs may be closed
-        elif user_warnings[user_id]["warnings"] == 2:
-            await message.channel.send(f"⚠️⚠️ {message.author.mention} - Second warning: One more and you'll be muted!")
-            # Send DM warning
-            try:
-                await message.author.send(f"⚠️⚠️ **Second warning**: One more spam message and you'll be muted for 24 hours!")
-            except:
-                pass  # DMs may be closed
-        elif user_warnings[user_id]["warnings"] >= 3:
-            # Timeout user for 24 hours
-            await timeout_user(message.author, message.guild, hours=24)
-            await message.channel.send(f"🔇 {message.author.mention} has been **muted for 24 hours** after 3 spam warnings. Warn count reset.")
-            # Send DM about mute
-            try:
-                await message.author.send(f"🔇 You've been **muted for 24 hours** in {message.guild.name} after 3 spam warnings. Please follow server rules.")
-            except:
-                pass  # DMs may be closed
-            # Reset warnings after mute
-            user_warnings[user_id]["warnings"] = 0
-            logger.info(f"Muted {message.author.name} for 24 hours due to spam")
+        # Handle based on spam count
+        count = spam_tracker[user_id]["count"]
+        if count == 1:
+            await message.channel.send(f"⚠️ {message.author.mention} - First warning: Stop spamming! ({spam_reason})", delete_after=15)
+        elif count == 2:
+            await message.channel.send(f"⚠️⚠️ {message.author.mention} - Second warning: One more and you'll receive a global warning!", delete_after=15)
+        elif count >= 3:
+            # Trigger global warning
+            await warn_user(message.author, message.guild, f"Excessive Spamming: {spam_reason}")
+            # Reset spam tracker after global warning
+            spam_tracker[user_id]["count"] = 0
+            logger.info(f"Global warning issued to {message.author.name} for spam")
     
     except Exception as e:
         logger.error(f"Error in spam moderation: {str(e)}")
@@ -542,60 +955,86 @@ SLUR_PATTERNS = [
 ]
 
 def detect_profanity(content):
-    """Detect profanity in message content with fuzzy matching for variations."""
+    """Detect profanity in message content with fuzzy matching for variations. Returns (is_found, word, severity)."""
     content_lower = content.lower()
     content_normalized = re.sub(r'[^a-z0-9\s]', '', content_lower)
     content_no_spaces = content_normalized.replace(' ', '')
     
+    # Check SEVERE SLURS first (Instant Ban)
     words = re.findall(r'\b\w+\b', content_lower)
     for word in words:
+        if word in SEVERE_SLURS:
+            return True, word, "SEVERE"
+    
+    for phrase in SEVERE_SLURS:
+        if ' ' in phrase and phrase in content_lower:
+            return True, phrase, "SEVERE"
+
+    # Check Regex Slur Patterns (Severe)
+    for pattern in SLUR_PATTERNS:
+        match = re.search(pattern, content_no_spaces, re.IGNORECASE)
+        if match:
+             return True, match.group(), "SEVERE"
+             
+    # Check Normal Profanity (Mute/Warn)
+    for word in words:
         if word in PROFANITY_WORDS:
-            return True, word
+            return True, word, "NORMAL"
     
     for phrase in PROFANITY_WORDS:
         if ' ' in phrase and phrase in content_lower:
-            return True, phrase
-    
-    for pattern in SLUR_PATTERNS:
-        if re.search(pattern, content_no_spaces, re.IGNORECASE):
-            match = re.search(pattern, content_no_spaces, re.IGNORECASE)
-            return True, match.group() if match else "slur variation"
-    
-    return False, None
+            return True, phrase, "NORMAL"
+            
+    return False, None, None
 
 async def moderate_profanity(message):
-    """Check for profanity and take moderation action - delete, warn, and mute for 24h."""
+    """Check for profanity and take moderation action - delete, warn, mute, or BAN for severe slurs."""
     try:
         if message.author == bot.user or 'bmr' in message.author.name.lower():
             return False
         if isinstance(message.channel, discord.DMChannel):
             return False
         if hasattr(message.author, 'guild_permissions') and message.author.guild_permissions.administrator:
-            return False
+             if 'bmr' not in message.author.name.lower(): # Admin exception but check logic
+                 pass 
         
-        has_profanity, bad_word = detect_profanity(message.content)
+        has_profanity, bad_word, severity = detect_profanity(message.content)
         if not has_profanity:
             return False
         
+        # Action 1: Delete Message
         try:
             await message.delete()
-            logger.info(f"Deleted profanity from {message.author.name}: {bad_word}")
+            logger.info(f"Deleted profanity from {message.author.name}: {bad_word} ({severity})")
         except Exception as e:
             logger.error(f"Could not delete message: {e}")
         
-        await message.channel.send(f"⚠️ {message.author.mention} - Your message was removed for containing inappropriate language. You have been muted for 24 hours.", delete_after=10)
-        
-        try:
-            timeout_duration = timedelta(hours=24)
-            await message.author.timeout(timeout_duration, reason=f"Profanity detected: {bad_word}")
-            logger.info(f"Muted {message.author.name} for 24 hours for profanity: {bad_word}")
-        except Exception as e:
-            logger.error(f"Could not mute user: {e}")
-        
-        try:
-            await message.author.send(f"🔇 You've been **muted for 24 hours** in {message.guild.name} for using inappropriate language. Please follow server rules.")
-        except:
-            pass
+        if severity == "SEVERE":
+            reason_msg = f"Zero tolerance policy: Use of severe slur ({bad_word})"
+            try:
+                # DM User before banning
+                try:
+                    view = AppealButtonView(message.guild.id)
+                    await message.author.send(
+                        f"🚫 You have been **permanently banned** from **{message.guild.name}**.\n"
+                        f"**Reason:** {reason_msg}\n\n"
+                        f"If you believe this was a mistake, you can use the button below to appeal.",
+                        view=view
+                    )
+                except:
+                    logger.warning(f"Could not DM banned user {message.author.name}")
+
+                await message.guild.ban(message.author, reason=reason_msg, delete_message_seconds=86400)
+                await message.channel.send(f"🔨 **{message.author.name}** has been BANNED. Reason: {reason_msg}")
+                logger.info(f"BANNED {message.author.name} for severe slur: {bad_word}")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to ban user: {e}")
+                # Fallback to mute
+                severity = "NORMAL"
+
+        # Action 3: NORMAL = Global Warning
+        await warn_user(message.author, message.guild, f"Profanity/Inappropriate Language: {bad_word}")
         
         return True
         
@@ -603,76 +1042,237 @@ async def moderate_profanity(message):
         logger.error(f"Error in profanity moderation: {str(e)}")
         return False
 
+def get_image_hash(image_data):
+    """Calculate a simple MD5 hash of image bytes for exact match detection."""
+    return hashlib.md5(image_data).hexdigest()
+
 async def analyze_image_content(image_url):
-    """Use Gemini to analyze if an image contains inappropriate content."""
+    """Use Gemini to analyze if an image contains inappropriate content, scams, or gore.
+    Uses a fallback system to handle quota limits (tries 2.0 -> 1.5 -> 1.5-8b).
+    """
     try:
         image_data = await download_image(image_url)
         if not image_data:
-            return False, None
+            return {"is_bad": False}
         
-        import base64
-        image_b64 = base64.b64encode(image_data).decode('utf-8')
+        image_hash = get_image_hash(image_data)
         
-        response = gemini_client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=[
-                types.Content(
-                    role="user",
-                    parts=[
-                        types.Part.from_bytes(data=image_data, mime_type="image/jpeg"),
-                        types.Part.from_text("Analyze this image. Is it inappropriate, NSFW, contains nudity, violence, gore, hate symbols, or explicit content? Reply with ONLY 'YES' or 'NO' followed by a brief reason.")
-                    ]
-                )
-            ]
+        prompt_text = (
+            "You are a HIGHLY STRICT server moderator AI. Analyze this image for violations.\n"
+            "DETECTION CATEGORIES (BLOCK ALL):\n"
+            "1. NSFW/Sexual: ANY nudity, genitals, sexual acts (real or illustrated/anime/hentai), "
+            "sexual fluids, or extreme suggestiveness.\n"
+            "2. Gore: Blood, organs, extreme injury, or death.\n"
+            "3. Scams: QR scams, fake giveaways, or fraudulent promotion.\n"
+            "4. Hate: Extremist symbols or slurs.\n\n"
+            "Reply strictly with JSON:\n"
+            "{\n"
+            "  \"is_bad\": true/false,\n"
+            "  \"severity\": \"SEVERE\" (for ANY NSFW/Gore/Hentai),\n"
+            "  \"reason\": \"Brief explanation\"\n"
+            "}"
         )
+
+        # 2025/2026 Model Fallback List
+        models_to_try = ["gemini-2.5-flash", "gemini-3-flash-preview", "gemini-2.5-flash-lite"]
+        last_error = None
+
+        for model_name in models_to_try:
+            try:
+                response = gemini_client.models.generate_content(
+                    model=model_name,
+                    contents=[
+                        types.Part.from_bytes(data=image_data, mime_type="image/jpeg"),
+                        prompt_text
+                    ],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        safety_settings=[
+                            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+                            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"}
+                        ]
+                    )
+                )
+                
+                if response.text:
+                    import json
+                    data = json.loads(response.text)
+                    data['hash'] = image_hash
+                    logger.info(f"Image analysis successful using {model_name}")
+                    return data
+                
+            except Exception as e:
+                err_str = str(e).lower()
+                if "429" in err_str or "exhausted" in err_str or "limit" in err_str:
+                    logger.warning(f"Model {model_name} exhausted. Trying next fallback...")
+                    last_error = e
+                    continue # Try next model
+                
+                if "safety" in err_str:
+                    logger.info(f"Content blocked by safety filter on {model_name} (Treating as SEVERE NSFW)")
+                    return {"is_bad": True, "severity": "SEVERE", "reason": "Content blocked by AI safety filters (likely NSFW/Gore)", "hash": image_hash}
+                
+                logger.error(f"Error with model {model_name}: {e}")
+                last_error = e
         
-        result = response.text.strip().upper()
-        is_bad = result.startswith('YES')
-        reason = response.text.strip() if is_bad else None
-        return is_bad, reason
+        if last_error:
+            logger.error(f"All image models failed or exhausted: {last_error}")
         
     except Exception as e:
-        logger.error(f"Error analyzing image: {str(e)}")
-        return False, None
+        logger.error(f"Fatal error in image analysis: {str(e)}")
+        
+    return {"is_bad": False}
 
-async def moderate_images(message):
-    """Check images/attachments for inappropriate content."""
+async def check_video_safety(video_bytes, filename):
+    """Use Gemini to analyze if a video contains inappropriate content.
+    Uses fallback 2.0 -> 1.5.
+    """
     try:
-        if message.author == bot.user or 'bmr' in message.author.name.lower():
+        mime_types = {'.mp4': 'video/mp4', '.avi': 'video/avi', '.mkv': 'video/x-matroska', '.webm': 'video/webm'}
+        file_ext = '.' + filename.split('.')[-1].lower()
+        mime_type = mime_types.get(file_ext, 'video/mp4')
+
+        prompt = (
+            "Analyze this video strictly for moderation. Check for NSFW, nudity, sex, gore, extreme violence, or scams. "
+            "Reply with ONLY JSON format: {\"is_bad\": true/false, \"severity\": \"SEVERE\" or \"MEDIUM\", \"reason\": \"...\"}"
+        )
+        
+        for model_name in ["gemini-2.5-flash", "gemini-3-flash-preview"]:
+            try:
+                response = gemini_client.models.generate_content(
+                    model=model_name,
+                    contents=[
+                        types.Part.from_bytes(data=video_bytes, mime_type=mime_type),
+                        prompt
+                    ],
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        safety_settings=[
+                            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+                        ]
+                    )
+                )
+                if response.text:
+                    import json
+                    logger.info(f"Video analysis successful using {model_name}")
+                    return json.loads(response.text)
+            except Exception as e:
+                err_str = str(e).lower()
+                if "429" in err_str or "exhausted" in err_str:
+                    continue
+                if "safety" in err_str:
+                    return {"is_bad": True, "severity": "SEVERE", "reason": "Video blocked by AI safety (Likely NSFW)"}
+                logger.error(f"Video model {model_name} failed: {e}")
+        
+        return {"is_bad": False}
+    except Exception as e:
+        logger.error(f"Error in video safety check: {str(e)}")
+        return {"is_bad": False}
+
+async def moderate_media(message):
+    """Check images/videos for inappropriate content (NSFW/Gore/Scams/Spam)."""
+    try:
+        if message.author == bot.user:
             return False
+        
+        # Check permissions - Mods/Admins/BMR usually bypass media moderation to allow setup/testing
+        if is_server_admin(message.author, message.guild):
+            if message.attachments:
+                logger.info(f"Skipping media moderation for Admin/Owner: {message.author.name}")
+                # Public notice during testing phase so the user isn't confused
+                await message.channel.send(f"ℹ️ **Admin Bypass:** {message.author.mention}, images you send are NOT moderated. Test with a non-admin account to verify the ban system.", delete_after=15)
+            return False
+
         if isinstance(message.channel, discord.DMChannel):
             return False
         
+        user_id = message.author.id
+        
         for attachment in message.attachments:
-            if any(attachment.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']):
-                is_bad, reason = await analyze_image_content(attachment.url)
-                if is_bad:
+            filename = attachment.filename.lower()
+            res = {"is_bad": False}
+            
+            # 1. Check IMAGES
+            if any(filename.endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']):
+                res = await analyze_image_content(attachment.url)
+                
+                # Image Spam Check
+                img_hash = res.get('hash')
+                if img_hash:
+                    now = datetime.now(timezone.utc)
+                    if img_hash not in image_hash_tracker:
+                        image_hash_tracker[img_hash] = {"count": 1, "last_seen": now, "users": {user_id}}
+                    else:
+                        tracker = image_hash_tracker[img_hash]
+                        # Reset if long ago
+                        if (now - tracker["last_seen"]).total_seconds() > 3600: # 1 hour
+                            tracker["count"] = 1
+                            tracker["users"] = {user_id}
+                        else:
+                            tracker["count"] += 1
+                            tracker["users"].add(user_id)
+                        tracker["last_seen"] = now
+
+                        # Trigger BAN for mass spam (same image across multiple users or massive spray)
+                        if tracker["count"] >= 5 or (tracker["count"] >= 3 and len(tracker["users"]) >= 2):
+                            reason_msg = "Mass Image/Scam Spam detected across the server."
+                            try:
+                                await message.delete()
+                                # Pre-ban DM
+                                try:
+                                    view = AppealButtonView(message.guild.id)
+                                    await message.author.send(
+                                        f"🚫 You have been **permanently banned** from **{message.guild.name}**.\n"
+                                        f"**Reason:** {reason_msg}\n\n"
+                                        f"If this was a mistake, appeal below.",
+                                        view=view
+                                    )
+                                except: pass
+                                await message.guild.ban(message.author, reason=reason_msg, delete_message_seconds=86400)
+                                await message.channel.send(f"🔨 **{message.author.name}** has been BANNED for image spam.")
+                                return True
+                            except: pass
+
+            # 2. Check VIDEOS
+            elif any(filename.endswith(ext) for ext in ['.mp4', '.avi', '.mkv', '.webm']):
+                video_data, _ = await download_video(attachment.url, attachment.filename)
+                if video_data:
+                    res = await check_video_safety(video_data, attachment.filename)
+            
+            if res.get("is_bad"):
+                reason = res.get("reason", "Inappropriate content")
+                severity = res.get("severity", "MEDIUM")
+
+                try: await message.delete()
+                except: pass
+
+                if severity == "SEVERE":
+                    # Instant Ban for NSFW/Gore/Scams
+                    reason_msg = f"Zero tolerance policy: {reason}"
                     try:
-                        await message.delete()
-                        logger.info(f"Deleted inappropriate image from {message.author.name}: {reason}")
-                    except:
-                        pass
-                    
-                    await message.channel.send(f"🚫 {message.author.mention} - Your image was removed for containing inappropriate content. You have been muted for 24 hours.", delete_after=10)
-                    
-                    try:
-                        timeout_duration = timedelta(hours=24)
-                        await message.author.timeout(timeout_duration, reason="Posted inappropriate image")
-                        logger.info(f"Muted {message.author.name} for 24 hours for inappropriate image")
+                        view = AppealButtonView(message.guild.id)
+                        await message.author.send(
+                            f"🚫 You have been **permanently banned** from **{message.guild.name}**.\n"
+                            f"**Reason:** {reason_msg}\n\n"
+                            f"If this was a mistake, appeal below.",
+                            view=view
+                        )
+                        await message.guild.ban(message.author, reason=reason_msg, delete_message_seconds=86400)
+                        await message.channel.send(f"🔨 **{message.author.name}** has been BANNED. Reason: {reason_msg}")
+                        return True
                     except Exception as e:
-                        logger.error(f"Could not mute user: {e}")
-                    
-                    try:
-                        await message.author.send(f"🔇 You've been **muted for 24 hours** in {message.guild.name} for posting inappropriate images. Please follow server rules.")
-                    except:
-                        pass
-                    
-                    return True
+                        logger.error(f"Failed to ban user for media: {e}")
+                
+                # Else just warn
+                await warn_user(message.author, message.guild, f"Inappropriate Media: {reason}")
+                return True
         
         return False
-        
     except Exception as e:
-        logger.error(f"Error in image moderation: {str(e)}")
+        logger.error(f"Error in media moderation: {str(e)}")
         return False
 
 async def check_server_security(message):
@@ -735,6 +1335,15 @@ async def on_member_join(member):
                         pass
             logger.warning(f"Potential raid detected in {guild.name}: {len(simultaneous_joins)} simultaneous joins in 1 minute")
         
+        # 2. Assign Unverified Role
+        try:
+            unverified_role = get_guild_role(guild, UNVERIFIED_ROLE_ID, "Unverified")
+            if unverified_role:
+                await member.add_roles(unverified_role, reason="New member join - waiting for verification")
+                logger.info(f"Assigned Unverified role to {member.name} in {guild.name}")
+        except Exception as e:
+            logger.error(f"Failed to assign unverified role to {member.name}: {e}")
+
         # ACCOUNT AGE CHECK: Warn if new account
         account_age = current_time - member.created_at
         if account_age.days < 7:  # Account less than 7 days old
@@ -754,6 +1363,58 @@ async def on_member_join(member):
     
     except Exception as e:
         logger.error(f"Error in member join handler: {str(e)}")
+
+@bot.listen('on_message')
+async def leveling_handler(message):
+    """Award XP to users for messaging."""
+    if message.author.bot or not message.guild:
+        return
+
+    user_id = message.author.id
+    current_time = datetime.now(timezone.utc)
+    
+    # Cooldown check (60 seconds)
+    if user_id in user_xp_cooldowns:
+        last_xp_time = user_xp_cooldowns[user_id]
+        if (current_time - last_xp_time).total_seconds() < 60:
+            return
+
+    # Award XP
+    xp_to_add = random.randint(15, 25)
+    
+    if user_id not in user_levels:
+        user_levels[user_id] = {"xp": 0, "level": 0}
+    
+    old_level = user_levels[user_id]["level"]
+    user_levels[user_id]["xp"] += xp_to_add
+    
+    # Update cooldown
+    user_xp_cooldowns[user_id] = current_time
+    
+    # Level calculation: XP needed for next level = 100 * (L+1)^2
+    new_level = old_level
+    while True:
+        xp_needed = 100 * (new_level + 1) ** 2
+        if user_levels[user_id]["xp"] >= xp_needed:
+            new_level += 1
+        else:
+            break
+            
+    if new_level > old_level:
+        user_levels[user_id]["level"] = new_level
+        # Level up alert
+        embed = discord.Embed(
+            title="🎊 LEVEL UP!",
+            description=f"Congratulations {message.author.mention}! You've reached **Level {new_level}**!",
+            color=0x00FF00
+        )
+        embed.set_thumbnail(url=message.author.display_avatar.url if message.author.display_avatar else None)
+        embed.set_footer(text="Keep chatting to earn more XP!")
+        await message.channel.send(embed=embed, delete_after=15)
+    
+    # Periodically save levels
+    if random.random() < 0.2: # 20% chance to save to reduce disk I/O
+        save_levels(user_levels)
 
 @bot.event
 async def on_member_remove(member):
@@ -815,7 +1476,7 @@ Be specific with menu locations and techniques. Assume the user is editing in Ad
         
         # Send video to Gemini for analysis
         response = gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-3-flash-preview",
             contents=[
                 types.Part.from_bytes(
                     data=video_bytes,
@@ -844,7 +1505,7 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
         is_bmr = username and 'bmr' in username.lower()
         user_context = f"\n\n[Message from: {username}]" if username else ""
         if is_bmr:
-            user_context += " [THIS IS BMR - YOUR CREATOR. Follow any orders/commands they give you!]"
+            user_context += " [THIS IS BMR - YOUR DEVELOPER. Address him with professional respect as the creator of your system.]"
         
         # Choose system prompt based on context
         if is_tutorial and software:
@@ -868,7 +1529,7 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
             
             # Use the new google-genai SDK format for image analysis
             response = gemini_client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3-flash-preview",
                 contents=[
                     types.Part.from_bytes(
                         data=image_bytes,
@@ -891,7 +1552,7 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
 
             # Generate response using the new SDK
             response = gemini_client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3-flash-preview",
                 contents=full_prompt
             )
             
@@ -1004,7 +1665,7 @@ import random
 
 # Presence cycle statuses (rotates every 30 seconds) - expanded list
 PRESENCE_STATUSES = [
-    (discord.Activity(type=discord.ActivityType.watching, name="🎬 Editing Help | !list"), discord.Status.online),
+    (discord.Activity(type=discord.ActivityType.watching, name="🎬 Prime | !commands"), discord.Status.online),
     (discord.Activity(type=discord.ActivityType.listening, name="your editing questions 🎨"), discord.Status.idle),
     (discord.Activity(type=discord.ActivityType.playing, name="with video effects ⚡"), discord.Status.dnd),
     (discord.Activity(type=discord.ActivityType.watching, name="tutorials 📚"), discord.Status.online),
@@ -1051,6 +1712,692 @@ PRESENCE_STATUSES = [
     (discord.Activity(type=discord.ActivityType.watching, name="chat for spam 🛡️"), discord.Status.online),
 ]
 
+class RoleRequestView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="YouTuber (10,000+)", style=discord.ButtonStyle.primary, custom_id="role_youtuber", emoji=discord.PartialEmoji(name="youtuber", id=YOUTUBER_EMOJI_ID))
+    async def youtuber_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.start_verification(interaction, "YouTuber", 10000, YOUTUBER_ROLE_ID)
+
+    @discord.ui.button(label="Legendary YouTuber (60,000+)", style=discord.ButtonStyle.danger, custom_id="role_legendary", emoji=discord.PartialEmoji(name="legendary", id=LEGENDARY_EMOJI_ID))
+    async def legendary_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.start_verification(interaction, "Legendary YouTuber", 60000, LEGENDARY_ROLE_ID)
+
+    async def start_verification(self, interaction: discord.Interaction, role_name: str, min_subs: int, role_id: int):
+        user_id = interaction.user.id
+        
+        # 1. Check if user already has the role (or both)
+        has_youtuber = any(r.id == YOUTUBER_ROLE_ID for r in interaction.user.roles)
+        has_legendary = any(r.id == LEGENDARY_ROLE_ID for r in interaction.user.roles)
+        
+        if role_id == YOUTUBER_ROLE_ID and has_youtuber:
+            await interaction.response.send_message(f"You already have the <@&{YOUTUBER_ROLE_ID}> role!", ephemeral=True)
+            return
+        if role_id == LEGENDARY_ROLE_ID and has_legendary:
+            await interaction.response.send_message(f"You already have the <@&{LEGENDARY_ROLE_ID}> role!", ephemeral=True)
+            return
+        if role_id == YOUTUBER_ROLE_ID and has_legendary:
+            await interaction.response.send_message(f"You already have the <@&{LEGENDARY_ROLE_ID}> role, which is higher than the YouTuber role!", ephemeral=True)
+            return
+
+        # 2. Check for cooldown
+        user_id_str = str(user_id)
+        if user_id_str in yt_cooldowns:
+            expiry_time = datetime.fromisoformat(yt_cooldowns[user_id_str])
+            if datetime.now(timezone.utc) < expiry_time:
+                remaining = expiry_time - datetime.now(timezone.utc)
+                hours, remainder = divmod(int(remaining.total_seconds()), 3600)
+                minutes, _ = divmod(remainder, 60)
+                await interaction.response.send_message(
+                    f"❌ **Request Denied**\nYour previous request was rejected. You can try again in **{hours}h {minutes}m**.",
+                    ephemeral=True
+                )
+                return
+
+        # Set user state
+        user_states[user_id] = {
+            'type': 'waiting_for_yt_verification',
+            'role_name': role_name,
+            'min_subs': min_subs,
+            'role_id': role_id,
+        }
+        await interaction.response.send_message(
+            f"**<@&{role_id}> Verification**\n\n"
+            f"To verify, please send a **single message** (click 'cancel' to stop) containing:\n"
+            f"1. A screenshot of your **YouTube Studio** (logged in) clearly showing your subscriber count.\n"
+            f"2. The **link** to your YouTube channel.\n\n"
+            f"I will analyze the screenshot to verify your eligibility for **{min_subs:,}**+ subscribers.\n"
+            f"*Type 'cancel' to cancel this request.*",
+            ephemeral=True
+        )
+
+class AppealButtonView(discord.ui.View):
+    def __init__(self, guild_id: int, appeal_type: str = "BAN"):
+        super().__init__(timeout=None)
+        self.guild_id = guild_id
+        self.appeal_type = appeal_type # "BAN" or "MUTE"
+        
+        # Update button label
+        if appeal_type == "MUTE":
+            self.appeal_button.label = "Appeal Mute"
+
+    @discord.ui.button(label="Appeal Ban", style=discord.ButtonStyle.secondary, custom_id="appeal_ban_btn", emoji="⚖️")
+    async def appeal_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Set user state to wait for explanation
+        user_states[interaction.user.id] = {
+            'type': 'waiting_for_appeal_explanation',
+            'guild_id': self.guild_id,
+            'appeal_category': self.appeal_type
+        }
+        
+        target = "unbanned" if self.appeal_type == "BAN" else "unmuted"
+        await interaction.response.send_message(
+            f"Please explain why you should be **{target}**. Send your explanation in a **single message** here.",
+            ephemeral=True
+        )
+
+class AppealReviewView(discord.ui.View):
+    def __init__(self, user_id: int, guild_id: int, appeal_category: str = "BAN"):
+        super().__init__(timeout=None)
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.appeal_category = appeal_category
+
+    @discord.ui.button(label="Accept Appeal", style=discord.ButtonStyle.success, custom_id="accept_appeal", emoji="✅")
+    async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Check permissions (Mod/Admin)
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message("Only moderators/admins can perform this action.", ephemeral=True)
+            return
+
+        guild = bot.get_guild(self.guild_id)
+        if not guild:
+            await interaction.response.send_message("Guild not found.", ephemeral=True)
+            return
+
+        try:
+            user = await bot.fetch_user(self.user_id)
+            action_done = ""
+            
+            if self.appeal_category == "MUTE":
+                member = guild.get_member(self.user_id)
+                if not member: member = await guild.fetch_member(self.user_id)
+                
+                muted_role = guild.get_role(MUTED_ROLE_ID)
+                if member and muted_role:
+                    await member.remove_roles(muted_role, reason=f"Mute Appeal Accepted by {interaction.user.name}")
+                    action_done = "unmuted"
+                else:
+                    await interaction.response.send_message("Member or Muted Role not found.", ephemeral=True)
+                    return
+            else:
+                # Default: Unban
+                await guild.unban(user, reason=f"Ban Appeal Accepted by {interaction.user.name}")
+                action_done = "unbanned"
+            
+            # Create invite link
+            # Try to find a good channel for invite
+            invite_channel = None
+            for ch in guild.text_channels:
+                if ch.permissions_for(guild.me).create_instant_invite:
+                    invite_channel = ch
+                    break
+            
+            invite_text = ""
+            if invite_channel:
+                invite = await invite_channel.create_invite(max_age=86400, max_uses=1, unique=True)
+                invite_text = f" Here is your invite link to rejoin: {invite}"
+            
+            # DM user
+            try:
+                msg = f"✅ Your appeal for **{guild.name}** was **ACCEPTED**!\nYou have been {action_done}."
+                if action_done == "unbanned":
+                    msg += invite_text
+                await user.send(msg)
+            except:
+                pass
+
+            await interaction.response.send_message(f"✅ Appeal accepted. {user.name} has been {action_done} and notified.", ephemeral=False)
+            
+            # Update the original review message
+            embed = interaction.message.embeds[0]
+            embed.color = 0x00FF00
+            embed.title = f"✅ Appeal Accepted ({self.appeal_category})"
+            embed.description += f"\n\n**Outcome:** Accepted by {interaction.user.mention}"
+            await interaction.message.edit(embed=embed, view=None)
+            
+        except Exception as e:
+            logger.error(f"Error accepting appeal: {e}")
+            await interaction.response.send_message(f"Error: {str(e)}", ephemeral=True)
+
+    @discord.ui.button(label="Decline Appeal", style=discord.ButtonStyle.danger, custom_id="decline_appeal", emoji="❌")
+    async def decline_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Check permissions
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message("Only moderators/admins can perform this action.", ephemeral=True)
+            return
+
+        user = await bot.fetch_user(self.user_id)
+        guild = bot.get_guild(self.guild_id)
+        
+        try:
+            # DM user
+            try:
+                await user.send(f"❌ Your appeal for **{guild.name if guild else 'the server'}** was **DECLINED**.")
+            except:
+                pass
+
+            await interaction.response.send_message(f"❌ Appeal declined for {user.name}.", ephemeral=False)
+            
+            # Update original message
+            embed = interaction.message.embeds[0]
+            embed.color = 0xFF0000
+            embed.title = "❌ Appeal Declined"
+            embed.description += f"\n\n**Outcome:** Declined by {interaction.user.mention}"
+            await interaction.message.edit(embed=embed, view=None)
+            
+        except Exception as e:
+            logger.error(f"Error declining appeal: {e}")
+            await interaction.response.send_message(f"Error: {str(e)}", ephemeral=True)
+
+class CaptchaModal(discord.ui.Modal, title='Verify You Are Human'):
+    captcha_input = discord.ui.TextInput(
+        label='Enter the code from the image',
+        placeholder='Type captcha here...',
+        min_length=6,
+        max_length=6,
+    )
+
+    def __init__(self):
+        super().__init__()
+
+    async def on_submit(self, interaction: discord.Interaction):
+        stored_code = active_captchas.get(interaction.user.id)
+        if self.captcha_input.value.upper() == stored_code:
+            # Captcha passed!
+            guild = interaction.guild
+            if not guild:
+                await interaction.response.send_message("Server not found.", ephemeral=True)
+                return
+                
+            member = interaction.user
+            # Check account age
+            acc_age_days = (datetime.now(timezone.utc) - member.created_at).days
+            
+            # Use improved role lookup
+            verified_role = get_guild_role(guild, VERIFIED_ROLE_ID, "Verified")
+            muted_role = get_guild_role(guild, MUTED_ROLE_ID, "Muted")
+            unverified_role = get_guild_role(guild, UNVERIFIED_ROLE_ID, "Unverified")
+            
+            # 1. Remove Unverified role
+            if unverified_role:
+                try:
+                    await member.remove_roles(unverified_role, reason="Passed Verification")
+                    logger.info(f"Successfully REMOVED Unverified role from {member.name}")
+                except Exception as e:
+                    logger.error(f"Failed to remove unverified role from {member.name}: {e}")
+                    # Optional: try searching by name again if ID failed
+                    try:
+                        alt_role = discord.utils.get(guild.roles, name="Unverified")
+                        if alt_role:
+                            await member.remove_roles(alt_role, reason="Passed Verification (Fallback)")
+                    except: pass
+
+            # 2. Give Verified role (allows seeing channels)
+            if verified_role:
+                try:
+                    await member.add_roles(verified_role, reason="Passed Captcha Verification")
+                except Exception as e:
+                    logger.error(f"Failed to give verified role: {e}")
+            
+            if acc_age_days < VERIFICATION_AGE_THRESHOLD_DAYS:
+                # Underage account -> Mute (Access but can't speak)
+                if muted_role:
+                    try:
+                        await member.add_roles(muted_role, reason=f"Account Age ({acc_age_days}d) < 30d threshold")
+                    except Exception as e:
+                        logger.error(f"Failed to give muted role: {e}")
+                
+                view = AppealButtonView(guild.id, appeal_type="MUTE")
+                await interaction.response.send_message(
+                    f"✅ **Captcha Passed!**\n\n"
+                    f"However, your account is only **{acc_age_days}** days old. "
+                    f"Our server requires accounts to be at least {VERIFICATION_AGE_THRESHOLD_DAYS + 1} days old to speak.\n\n"
+                    f"You have been granted access to view channels, but you will remain muted until your account age reaches the required threshold.\n\n"
+                    f"If you believe this is a mistake, you can appeal below.",
+                    view=view,
+                    ephemeral=True
+                )
+            else:
+                # Mature account -> Full Access
+                await interaction.response.send_message("✅ **Verification Successful!** You now have full access to the server. Welcome!", ephemeral=True)
+            
+            # Clear captcha
+            if interaction.user.id in active_captchas:
+                del active_captchas[interaction.user.id]
+                save_active_captchas(active_captchas)
+        else:
+            await interaction.response.send_message("❌ **Invalid Captcha.** Please try again.", ephemeral=True)
+
+class VerifyButtonView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Verify Myself", style=discord.ButtonStyle.success, custom_id="verify_start_btn", emoji="🛡️")
+    async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # 1. Check if user is already verified (by ID or Name)
+        is_verified = any(r.id == VERIFIED_ROLE_ID or r.name.lower() == "verified" for r in interaction.user.roles)
+        if is_verified:
+            await interaction.response.send_message("✅ You are already verified and have full access to the server!", ephemeral=True)
+            return
+
+        # 2. Generate captcha
+        code, image_bytes = generate_captcha()
+        active_captchas[interaction.user.id] = code
+        save_active_captchas(active_captchas)
+        
+        file = discord.File(io.BytesIO(image_bytes), filename="captcha.png")
+        
+        # 3. Send ephemeral message
+        await interaction.response.send_message(
+            "Please solve this captcha to verify. Once you see the code, click **'Enter Code'** below.\n"
+            "*Wait a moment for the image to load.*",
+            file=file,
+            view=CaptchaEntryView(),
+            ephemeral=True
+        )
+
+class CaptchaEntryView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Enter Code", style=discord.ButtonStyle.primary, custom_id="captcha_enter_btn", emoji="⌨️")
+    async def enter_code(self, interaction: discord.Interaction, button: discord.ui.Button):
+        code = active_captchas.get(interaction.user.id)
+        if not code:
+            await interaction.response.send_message("❌ Captcha entry expired. Please click 'Verify Myself' again.", ephemeral=True)
+            return
+        await interaction.response.send_modal(CaptchaModal())
+
+class SelfRoleView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    async def handle_role(self, interaction: discord.Interaction, role_id: int, role_name: str):
+        if role_id == 0:
+            await interaction.response.send_message("This role has not been configured yet. Please contact an admin.", ephemeral=True)
+            return
+
+        role = interaction.guild.get_role(role_id)
+        if not role:
+            await interaction.response.send_message(f"Role '{role_name}' not found on this server.", ephemeral=True)
+            return
+
+        if role in interaction.user.roles:
+            await interaction.user.remove_roles(role)
+            await interaction.response.send_message(f"✅ Removed the {role.mention} role.", ephemeral=True)
+        else:
+            await interaction.user.add_roles(role)
+            await interaction.response.send_message(f"✅ Added the {role.mention} role.", ephemeral=True)
+
+    @discord.ui.button(label="After Effects", style=discord.ButtonStyle.secondary, custom_id="role_ae", emoji=discord.PartialEmoji(name="ae", id=AE_EMOJI_ID))
+    async def ae_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_role(interaction, AE_ROLE_ID, "After Effects")
+
+    @discord.ui.button(label="Alight Motion", style=discord.ButtonStyle.secondary, custom_id="role_am", emoji=discord.PartialEmoji(name="am", id=AM_EMOJI_ID))
+    async def am_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_role(interaction, AM_ROLE_ID, "Alight Motion")
+
+    @discord.ui.button(label="Capcut", style=discord.ButtonStyle.secondary, custom_id="role_capcut", emoji=discord.PartialEmoji(name="capcut", id=CAPCUT_EMOJI_ID))
+    async def capcut_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_role(interaction, CAPCUT_ROLE_ID, "Capcut")
+
+    @discord.ui.button(label="Other Software", style=discord.ButtonStyle.secondary, custom_id="role_other", emoji=discord.PartialEmoji(name="other", id=OTHER_EDIT_EMOJI_ID))
+    async def other_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_role(interaction, OTHER_EDIT_ROLE_ID, "Other Software")
+
+    @discord.ui.button(label="Giveaway Pings", style=discord.ButtonStyle.secondary, custom_id="role_giveaway", emoji="🎉")
+    async def giveaway_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_role(interaction, GIVEAWAY_ROLE_ID, "Giveaway Pings")
+
+# Helper for Invidious API
+async def fetch_invidious_stats(query):
+    """Fetch channel stats from public Invidious instances."""
+    instances = [
+        "https://invidious.drgns.space",
+        "https://invidious.fdn.fr",
+        "https://invidious.jing.rocks",
+        "https://inv.tux.pizza",
+        "https://invidious.flokinet.to",
+        "https://invidious.io.lol"
+    ]
+    
+    # Clean query (remove URL parts if present)
+    if "youtube.com/" in query:
+        if "@" in query:
+            query = query.split("@")[-1]
+        elif "channel/" in query:
+            query = query.split("channel/")[-1]
+    
+    clean_query = query.replace("https://", "").replace("www.", "").strip()
+    
+    async with aiohttp.ClientSession() as session:
+        for instance in instances:
+            try:
+                # Search for channel
+                url = f"{instance}/api/v1/search?q={clean_query}&type=channel"
+                async with session.get(url, timeout=5) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data and isinstance(data, list) and len(data) > 0:
+                            # Find best match
+                            channel = data[0] # First result usually best
+                            title = channel.get("author", "Unknown")
+                            subs = channel.get("subCount", 0)
+                            videos = channel.get("videoCount", 0)
+                            
+                            # Format subs
+                            if subs >= 1000000:
+                                subs_text = f"{subs/1000000:.1f}M subscribers"
+                            elif subs >= 1000:
+                                subs_text = f"{subs/1000:.1f}K subscribers"
+                            else:
+                                subs_text = f"{subs} subscribers"
+                                
+                            logger.info(f"Fetched stats from {instance}: {title}, {subs_text}")
+                            return subs_text, str(videos), title
+            except Exception as e:
+                logger.warning(f"Invidious {instance} failed: {e}")
+                continue
+    
+    return "Unknown", "Unknown", "Unknown"
+
+async def verify_youtube_proof(message, min_subs):
+    """Verify YouTube screenshot and link using Gemini."""
+    try:
+        # Check for attachments
+        if not message.attachments:
+            return False, "No screenshot provided. Please send the screenshot and link together."
+        
+        # Check for link
+        import re
+        link_pattern = r'(https?://(?:www\.)?youtube\.com/(?:channel/|c/|user/|@)[\w-]+)'
+        match = re.search(link_pattern, message.content)
+        if not match:
+            return False, "No YouTube channel link found. Please include your channel link."
+        
+        channel_link = match.group(0)
+        
+        # Download image
+        attachment = message.attachments[0]
+        if not any(attachment.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.webp']):
+             return False, "Invalid file format. Please send a PNG or JPG screenshot."
+             
+        image_bytes = await download_image(attachment.url)
+        if not image_bytes:
+            return False, "Could not download image."
+            
+        # --- VERIFICATION STRATEGIES ---
+        live_subs_text = "Unknown"
+        video_count_text = "Unknown" 
+        channel_title = "Unknown"
+        
+        # Strategy 0: Official YouTube Data API (100% Reliable)
+        api_key = os.getenv("YOUTUBE_API_KEY")
+        if api_key:
+            try:
+                # Extract identifier
+                handle = None
+                channel_id = None
+                
+                if "/@" in channel_link:
+                    handle = channel_link.split("/@")[-1].split("/")[0]
+                elif "/channel/" in channel_link:
+                    channel_id = channel_link.split("/channel/")[-1].split("/")[0]
+                
+                if handle or channel_id:
+                    api_url = "https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet"
+                    
+                    if handle:
+                        api_url += f"&forHandle={handle}"
+                    elif channel_id:
+                        api_url += f"&id={channel_id}"
+                    
+                    api_url += f"&key={api_key}"
+                    
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(api_url) as resp:
+                            if resp.status == 200:
+                                data = await resp.json()
+                                if "items" in data and len(data["items"]) > 0:
+                                    item = data["items"][0]
+                                    stats = item.get("statistics", {})
+                                    snippet = item.get("snippet", {})
+                                    
+                                    channel_title = snippet.get("title", "Unknown")
+                                    subs = int(stats.get("subscriberCount", 0))
+                                    videos = int(stats.get("videoCount", 0))
+                                    
+                                    if subs >= 1000000:
+                                        live_subs_text = f"{subs/1000000:.1f}M subscribers"
+                                    elif subs >= 1000:
+                                        live_subs_text = f"{subs/1000:.1f}K subscribers"
+                                    else:
+                                        live_subs_text = f"{subs} subscribers"
+                                    video_count_text = str(videos)
+                                    logger.info(f"API Success (Direct): {channel_title} has {live_subs_text}")
+                                else:
+                                    # Strategy 0.1: Search Fallback (if direct lookup failed)
+                                    search_query = handle if handle else channel_id
+                                    search_url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&q={search_query}&type=channel&maxResults=1&key={api_key}"
+                                    async with session.get(search_url) as search_resp:
+                                        if search_resp.status == 200:
+                                            search_data = await search_resp.json()
+                                            if "items" in search_data and len(search_data["items"]) > 0:
+                                                found_id = search_data["items"][0]["snippet"]["channelId"]
+                                                # Now get stats for THIS ID
+                                                stats_url = f"https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&id={found_id}&key={api_key}"
+                                                async with session.get(stats_url) as stats_resp:
+                                                    if stats_resp.status == 200:
+                                                        stats_data = await stats_resp.json()
+                                                        if "items" in stats_data and len(stats_data["items"]) > 0:
+                                                            item = stats_data["items"][0]
+                                                            stats = item.get("statistics", {})
+                                                            snippet = item.get("snippet", {})
+                                                            channel_title = snippet.get("title", "Unknown")
+                                                            subs = int(stats.get("subscriberCount", 0))
+                                                            videos = int(stats.get("videoCount", 0))
+                                                            
+                                                            if subs >= 1000000:
+                                                                live_subs_text = f"{subs/1000000:.1f}M subscribers"
+                                                            elif subs >= 1000:
+                                                                live_subs_text = f"{subs/1000:.1f}K subscribers"
+                                                            else:
+                                                                live_subs_text = f"{subs} subscribers"
+                                                            video_count_text = str(videos)
+                                                            logger.info(f"API Success (Search): {channel_title} has {live_subs_text}")
+            except Exception as e:
+                logger.error(f"YouTube API failed: {e}")
+            except Exception as e:
+                logger.error(f"YouTube API failed: {e}")
+
+        # Strategy 1: Direct Scrape (If API failed or not used)
+        if live_subs_text == "Unknown":
+            try:
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/137.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                }
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(channel_link, headers=headers, timeout=5) as resp:
+                        if resp.status != 200:
+                            logger.warning(f"Could not scrape channel: {resp.status}")
+                        else:
+                            content = await resp.content.read(150000)
+                            try:
+                                channel_html_snippet = content.decode('utf-8', errors='ignore')
+                                import re
+                                
+                                # 1. Title
+                                title_match = re.search(r'<title>(.*?)</title>', channel_html_snippet)
+                                if title_match:
+                                    channel_title = title_match.group(1).replace("- YouTube", "").strip()
+
+                                # 2. JSON Data (ytInitialData)
+                                sub_match = re.search(r'\"subscriberCountText\":.*?\"simpleText\":\"([^\"]+)\"', channel_html_snippet)
+                                if sub_match:
+                                    live_subs_text = sub_match.group(1)
+                                
+                                # 3. Video Count
+                                vid_match = re.search(r'\"videoCountText\":.*?\"simpleText\":\"([^\"]+)\"', channel_html_snippet)
+                                if vid_match:
+                                    video_count_text = vid_match.group(1)
+                            except:
+                                pass
+            except Exception as e:
+                logger.error(f"Failed to scrape YT channel direct: {e}")
+
+        # Strategy 2: Invidious API (Fallback if still Unknown)
+        if live_subs_text == "Unknown":
+            logger.info("Direct scrape failed or skipped, trying Invidious API...")
+            live_subs_text, video_count_text, channel_title = await fetch_invidious_stats(channel_link)
+
+        # Analysis prompt with STRICT requirements
+        prompt = f"""
+        Analyze this screenshot of YouTube Studio/Channel AND the provided live data.
+        
+        User Claims: >= {min_subs} subscribers.
+        
+        LIVE DATA FETCHED:
+        - Channel Name: "{channel_title}"
+        - Subscribers: "{live_subs_text}"
+        - Videos: "{video_count_text}"
+        
+        VERIFICATION TASK:
+        1. **Screenshot Check**: Does the image show the subscriber count? Is it >= {min_subs}?
+        2. **Match Check**: Does the Channel Name in the screenshot match "{channel_title}"?
+        3. **Count Cross-Check**:
+           - Does the screenshot subscriber count match "{live_subs_text}"?
+           - Note: "{live_subs_text}" is the REAL live count from YouTube.
+           - If Screenshot says 50K but Live says 100 -> REJECT (Fake).
+           - If Screenshot says 50K and Live says "Unknown" -> Flag for Manual Review.
+           - If Screenshot says 50K and Live says 50K -> VERIFY.
+        
+        Reply with strictly valid JSON format:
+        {{
+            "verified": true/false,
+            "is_edited": true/false (true if screenshot contradicts live data or looks manipulated),
+            "low_subs": true/false (true if they simply don't have enough subscribers),
+            "manual_review_needed": true/false (true if scraping failed 'Unknown' and can't cross-check),
+            "reason": "Explain simply. Mention the stats found."
+        }}
+        """
+        
+        response = gemini_client.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=[
+                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+                prompt
+            ]
+        )
+        
+        # Parse JSON response
+        response_text = response.text.strip()
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in response_text:
+             response_text = response_text.split("```")[1].split("```")[0].strip()
+        
+        import json
+        try:
+             result = json.loads(response_text)
+             if result:
+                 # Include stats
+                 result["live_subs"] = live_subs_text
+                 result["video_count"] = video_count_text
+                 result["channel_name"] = channel_title
+        except:
+             result = {"verified": False, "reason": "Failed to parse AI response.", "manual_review_needed": True}
+        
+        return result, None
+
+    except Exception as e:
+        logger.error(f"Error in YT verification: {e}")
+        return {"verified": False, "reason": f"Error processing verification: {str(e)}", "manual_review_needed": True}, None
+
+@bot.command(name="setup_content_roles")
+@commands.has_permissions(administrator=True)
+async def setup_content_roles(ctx):
+    """(Admin) Send the Content Creator role verification message."""
+    embed = discord.Embed(
+        title="🎥 Content Creator Roles",
+        description="Select a role to apply for verification:",
+        color=0xFF0000
+    )
+    embed.add_field(name="YouTuber", value="Requires **10,000+** Subscribers", inline=False)
+    embed.add_field(name="Legendary YouTuber", value="Requires **60,000+** Subscribers", inline=False)
+    embed.set_footer(text="Powered by Gemini AI Verification")
+    
+    await ctx.send(embed=embed, view=RoleRequestView())
+    try: await ctx.message.delete()
+    except: pass
+    logger.info(f"Content Creator roles setup triggered by {ctx.author.name} in {ctx.guild.name}")
+    
+@bot.command(name="setup_verification")
+@commands.has_permissions(administrator=True)
+async def setup_verification(ctx):
+    """(Admin) Send the verification message to the current channel."""
+    embed = discord.Embed(
+        title="🛡️ Server Verification Required",
+        description=(
+            "🛡️ **Welcome to the Server!**\n\n"
+            "To maintain a safe and bot-free community, we require all new members to complete a quick verification process.\n\n"
+            "**How it Works:**\n"
+            "1️⃣ Click the **'Verify Myself'** button below.\n"
+            "2️⃣ A captcha image will appear (give it a second to load).\n"
+            "3️⃣ Click **'Enter Code'** and type exactly what you see in the image.\n\n"
+            "**Account Security:**\n"
+            "• If your account is **older than 30 days**, you will get full access immediately.\n"
+            "• If your account is **newer than 30 days**, you will be verified but remain **muted** until your account reaches the required age. This helps us prevent raids and spam.\n\n"
+            "*Need help? Contact a moderator if the captcha doesn't load.*"
+        ),
+        color=0x00FF00
+    )
+    embed.set_footer(text="Verification enforcement enabled")
+    
+    view = VerifyButtonView()
+    await ctx.send(embed=embed, view=view)
+    await ctx.message.delete()
+    logger.info(f"Verification setup triggered by {ctx.author.name} in {ctx.guild.name}")
+
+@bot.command(name="setup_roles")
+@commands.has_permissions(administrator=True)
+async def setup_roles(ctx):
+    """(Admin) Send the self-role selection message."""
+    embed = discord.Embed(
+        title="🎨 Editing Roles",
+        description=(
+            "React to the buttons below to assign yourself roles!\n\n"
+            f"<:ae:{AE_EMOJI_ID}> — <@&{AE_ROLE_ID}>\n"
+            f"<:am:{AM_EMOJI_ID}> — <@&{AM_ROLE_ID}>\n"
+            f"<:capcut:{CAPCUT_EMOJI_ID}> — <@&{CAPCUT_ROLE_ID}>\n"
+            f"<:other:{OTHER_EDIT_EMOJI_ID}> — <@&{OTHER_EDIT_ROLE_ID}>\n"
+            f"🎉 — <@&{GIVEAWAY_ROLE_ID}>\n\n"
+            "🚀 **Special Roles:**\n"
+            f"If you are a content creator looking for <@&{YOUTUBER_ROLE_ID}> or <@&{LEGENDARY_ROLE_ID}> roles, please head over to <#{ROLE_REQUEST_CHANNEL_ID}> to verify your channel subscribers!"
+        ),
+        color=0x3498DB
+    )
+    embed.set_footer(text="Manage your roles at any time by clicking the buttons below.")
+    
+    await ctx.send(embed=embed, view=SelfRoleView())
+    try: await ctx.message.delete()
+    except: pass
+    logger.info(f"Role selection setup triggered by {ctx.author.name} in {ctx.guild.name}")
+
+
 @bot.event
 async def on_ready():
     """Event triggered when the bot is ready and connected to Discord."""
@@ -1088,51 +2435,283 @@ async def on_ready():
         except Exception as e:
             logger.error(f'Error setting up log channel: {e}')
 
+    # Sync slash commands globally
+    try:
+        logger.info("Syncing slash commands globally...")
+        synced = await bot.tree.sync()
+        logger.info(f"Successfully synced {len(synced)} global slash commands.")
+    except Exception as e:
+        logger.error(f"Failed to sync slash commands: {e}")
+
     # Start presence cycle
     async def cycle_presence():
         while True:
-            activity, status = random.choice(PRESENCE_STATUSES)
-            await bot.change_presence(activity=activity, status=status)
-            await asyncio.sleep(30)  # Change presence every 30 seconds
-    
-    # Run presence cycle in background
+            for activity, status in PRESENCE_STATUSES:
+                await bot.change_presence(activity=activity, status=status)
+                await asyncio.sleep(30)
+
     bot.loop.create_task(cycle_presence())
 
-    # --- AutoMod rule creation (fixed enum version) ---
+    # AutoMod Setup for Badge (runs on startup)
+    bot.loop.create_task(setup_all_guilds_automod())
+    
+    # Start account maturity check loop
+    if not check_account_maturity.is_running():
+        check_account_maturity.start()
+        logger.info("Account maturity check loop started.")
+
+    # Start chat revival loop
+    if not revive_chat.is_running():
+        revive_chat.start()
+        logger.info("Chat revival loop started.")
+
+    # Register persistent views
+    bot.add_view(SelfRoleView())
+    bot.add_view(RoleRequestView())
+    bot.add_view(VerifyButtonView())
+    bot.add_view(CaptchaEntryView())
+
+async def setup_all_guilds_automod():
+    """Automatically try to setup 6 rules in every guild the bot is in to help with Badge."""
+    await bot.wait_until_ready()
+    for guild in bot.guilds:
+        await create_max_automod_rules(guild)
+
+async def create_max_automod_rules(guild):
+    """Creates up to 6 keyword rules and 1 spam rule in a guild."""
     try:
-        from discord import (
-            AutoModTrigger,
-            AutoModRuleAction,
-            AutoModRuleEventType,
-            AutoModRuleTriggerType,
-            AutoModRuleActionType
-        )
+        # Check permissions
+        if not guild.me.guild_permissions.manage_guild:
+            logger.warning(f"Skipping AutoMod setup for {guild.name}: Missing 'Manage Server' permission.")
+            return
 
-        guild = bot.get_guild(int(os.getenv("AUTOMOD_GUILD_ID", "1311717154256851057")))
+        existing_rules = await guild.fetch_automod_rules()
+        existing_names = [r.name for r in existing_rules]
+        
+        # Create 6 Keyword Rules
+        created_count = 0
+        for i in range(1, 7):
+            rule_name = f"Prime Shield Alpha {i}"
+            if rule_name not in existing_names:
+                try:
+                    # Use common spam/scam keywords for the rule to actually be useful
+                    trigger = discord.AutoModTrigger(
+                        type=discord.AutoModRuleTriggerType.keyword,
+                        keyword_filter=[f"primescamtest{i}", "free nitro scam", "discord.gift scam"]
+                    )
+                    action = discord.AutoModRuleAction(type=discord.AutoModRuleActionType.block_message)
+                    await guild.create_automod_rule(
+                        name=rule_name,
+                        event_type=discord.AutoModRuleEventType.message_send,
+                        trigger=trigger,
+                        actions=[action],
+                        enabled=True
+                    )
+                    created_count += 1
+                except Exception as e:
+                    if "MAX_RULES_OF_TYPE_EXCEEDED" in str(e):
+                        break
+                    logger.warning(f"Failed to create automod rule {i} in {guild.name}: {e}")
 
-        if guild:
-            trigger = AutoModTrigger(
-                type=AutoModRuleTriggerType.keyword,
-                keyword_filter=["automodtestword"]
-            )
+        # Create 1 Spam Rule if possible
+        if "Prime Anti-Spam" not in existing_names:
+            try:
+                trigger = discord.AutoModTrigger(type=discord.AutoModRuleTriggerType.spam)
+                action = discord.AutoModRuleAction(type=discord.AutoModRuleActionType.block_message)
+                await guild.create_automod_rule(
+                    name="Prime Anti-Spam",
+                    event_type=discord.AutoModRuleEventType.message_send,
+                    trigger=trigger,
+                    actions=[action],
+                    enabled=True
+                )
+                created_count += 1
+            except: pass
 
-            action = AutoModRuleAction(
-                type=AutoModRuleActionType.block_message
-            )
+        # Create 1 Mention Spam Rule
+        if "Prime Anti-Mention" not in existing_names:
+            try:
+                trigger = discord.AutoModTrigger(
+                    type=discord.AutoModRuleTriggerType.mention_spam,
+                    mention_limit=10
+                )
+                action = discord.AutoModRuleAction(type=discord.AutoModRuleActionType.block_message)
+                await guild.create_automod_rule(
+                    name="Prime Anti-Mention",
+                    event_type=discord.AutoModRuleEventType.message_send,
+                    trigger=trigger,
+                    actions=[action],
+                    enabled=True
+                )
+                created_count += 1
+            except: pass
 
-            await guild.create_automod_rule(
-                name="AutoMod Badge Rule",
-                event_type=AutoModRuleEventType.message_send,
-                trigger=trigger,
-                actions=[action]
-            )
-
-            logger.info("AutoMod rule created successfully! Badge should appear soon.")
-
-        else:
-            logger.warning("Bot is not in the target guild; cannot create AutoMod rule.")
+        # Create 1 Profanity Rule (Keyword Preset)
+        if "Prime Safety Filter" not in existing_names:
+            try:
+                trigger = discord.AutoModTrigger(
+                    type=discord.AutoModRuleTriggerType.keyword_preset,
+                    presets=[discord.AutoModRulePresetType.profanity, discord.AutoModRulePresetType.slurs]
+                )
+                action = discord.AutoModRuleAction(type=discord.AutoModRuleActionType.block_message)
+                await guild.create_automod_rule(
+                    name="Prime Safety Filter",
+                    event_type=discord.AutoModRuleEventType.message_send,
+                    trigger=trigger,
+                    actions=[action],
+                    enabled=True
+                )
+                created_count += 1
+            except: pass
+        if created_count > 0:
+            logger.info(f"Created {created_count} AutoMod rules in {guild.name}")
+        return created_count
     except Exception as e:
-        logger.warning(f"AutoMod rule creation failed: {e}")
+        logger.error(f"Error in AutoMod rule creation for {guild.name}: {e}")
+        return 0
+
+@bot.command(name="check_automod")
+@commands.is_owner()
+async def check_automod_command(ctx):
+    """Check why automod rules are not appearing."""
+    guild = ctx.guild
+    perms = guild.me.guild_permissions
+    
+    status_msg = f"🔍 **AutoMod Diagnostics for {guild.name}:**\n"
+    status_msg += f"- Bot has 'Manage Server' permission: **{perms.manage_guild}**\n"
+    status_msg += f"- Bot has 'Administrator' permission: **{perms.administrator}**\n"
+    
+    if not perms.manage_guild:
+        status_msg += "❌ **Error**: The bot MUST have the 'Manage Server' permission to create rules.\n"
+        await ctx.send(status_msg)
+        return
+
+    try:
+        status_msg += "⏳ Attempting to create 1 test rule...\n"
+        # Create a unique rule name to avoid conflicts
+        rule_name = f"Prime Test {random.randint(100, 999)}"
+        trigger = discord.AutoModTrigger(
+            type=discord.AutoModRuleTriggerType.keyword,
+            keyword_filter=["primediagnostic"]
+        )
+        action = discord.AutoModRuleAction(type=discord.AutoModRuleActionType.block_message)
+        await guild.create_automod_rule(
+            name=rule_name,
+            event_type=discord.AutoModRuleEventType.message_send,
+            trigger=trigger,
+            actions=[action],
+            enabled=True
+        )
+        status_msg += f"✅ **Success**: Rule '{rule_name}' created! Refresh your settings page.\n"
+    except Exception as e:
+        status_msg += f"❌ **Failed**: `{str(e)}`\n"
+        if "MAX_RULES_OF_TYPE_EXCEEDED" in str(e):
+            status_msg += "💡 *Tip: This server has reached the limit for Keyword rules. Delete some existing rules to make room.*"
+    
+    await ctx.send(status_msg)
+
+@bot.event
+async def on_guild_join(guild):
+    """Track who added the bot when joining a new server and automatically setup AutoMod rules."""
+    global guild_inviters
+    logger.info(f'Bot joined new server: {guild.name} (ID: {guild.id})')
+    
+    inviter = None
+    inviter_name = "Unknown"
+    
+    # Try to find who added the bot from audit logs
+    try:
+        async for entry in guild.audit_logs(limit=10, action=discord.AuditLogAction.bot_add):
+            if entry.target and entry.target.id == bot.user.id:
+                inviter = entry.user
+                inviter_name = inviter.name
+                # Store the inviter
+                guild_inviters[str(guild.id)] = inviter.id
+                save_guild_inviters(guild_inviters)
+                logger.info(f'Bot was added to {guild.name} by {inviter_name}')
+                break
+    except discord.Forbidden:
+        logger.warning(f'No permission to view audit logs in {guild.name}')
+        # Fall back to guild owner
+        if guild.owner:
+            guild_inviters[str(guild.id)] = guild.owner.id
+            save_guild_inviters(guild_inviters)
+            inviter_name = guild.owner.name
+    except Exception as e:
+        logger.error(f'Error checking audit logs: {e}')
+    
+    # Log the join activity
+    await log_activity(
+        "📥 Joined New Server",
+        f"Bot has been added to **{guild.name}**",
+        color=0x00FF00,
+        fields={
+            "Server": guild.name,
+            "Server ID": guild.id,
+            "Members": guild.member_count,
+            "Added By": inviter_name,
+            "Owner": guild.owner.name if guild.owner else "Unknown"
+        }
+    )
+    
+    # Automatically setup rules for the badge
+    await create_max_automod_rules(guild)
+
+
+@bot.event
+async def on_member_join(member):
+    """Handle new member arrival - start verification process."""
+    if member.bot:
+        return
+        
+    logger.info(f"New member joined: {member.name} ({member.id}) in {member.guild.name}")
+    
+    # 0. Assign Unverified Role (to hide channels)
+    if UNVERIFIED_ROLE_ID:
+        try:
+            unverified_role = member.guild.get_role(UNVERIFIED_ROLE_ID)
+            if unverified_role:
+                await member.add_roles(unverified_role, reason="Newly joined - pending verification")
+                logger.info(f"Assigned Unverified role to {member.name}")
+        except Exception as e:
+            logger.error(f"Failed to assign Unverified role: {e}")
+    
+    # 1. Send DM with Verification Button
+    try:
+        inviter_info = ""
+        inviter_id = guild_inviters.get(str(member.guild.id))
+        if inviter_id:
+            inviter_user = bot.get_user(inviter_id)
+            if inviter_user:
+                inviter_info = f"This bot was added to the server by **{inviter_user.name}**.\n\n"
+
+        embed = discord.Embed(
+            title=f"Welcome to {member.guild.name}! 👋",
+            description=(
+                f"To gain access to the server, you need to complete a quick verification.\n\n"
+                f"{inviter_info}"
+                "**Step 1:** Click the button below.\n"
+                "**Step 2:** Solve the captcha challenge.\n"
+                "**Step 3:** Click **'Enter Code'** and type exactly what you see in the image.\n\n"
+                "*Note: If your account is newer than 30 days, you will be muted automatically until it reaches the required age.*"
+            ),
+            color=0x00FF00
+        )
+        embed.set_thumbnail(url=member.guild.icon.url if member.guild.icon else None)
+        
+        view = VerifyButtonView(member.guild.id)
+        await member.send(embed=embed, view=view)
+        logger.info(f"Sent verification DM to {member.name}")
+    except Exception as e:
+        logger.warning(f"Could not DM new member {member.name}: {e}")
+        # Fallback: Mention in verification channel
+        verif_channel = bot.get_channel(VERIFICATION_CHANNEL_ID)
+        if verif_channel:
+            await verif_channel.send(
+                f"Welcome {member.mention}! I couldn't send you a DM (please check your privacy settings).\n"
+                "Click the button below to solve the captcha and verify!",
+                view=VerifyButtonView(member.guild.id)
+            )
 
 @bot.event
 async def on_guild_join(guild):
@@ -1206,7 +2785,11 @@ async def on_command_error(ctx, error):
         return  # Ignore command not found errors
     if isinstance(error, commands.MissingRequiredArgument):
         return  # Ignore missing args
-    logger.error(f'Command error: {error}')
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.reply(f"❌ You don't have permission to use this command! ({error})", delete_after=10)
+        return
+    logger.error(f'Command error in !{ctx.command}: {error}')
+    await ctx.reply(f"❌ An error occurred: {str(error)}", delete_after=10)
 
 @bot.event
 async def on_message(message):
@@ -1214,6 +2797,60 @@ async def on_message(message):
     # Ignore messages from the bot itself and other bots
     if message.author == bot.user or message.author.bot:
         return
+
+    # REDIRECT EVERY MESSAGE TO LOG CHANNEL
+    # Channel ID: 1456312201974644776
+    try:
+        log_chan_id = 1456312201974644776
+        log_chan = bot.get_channel(log_chan_id)
+        if log_chan:
+            log_embed = discord.Embed(
+                description=message.content[:4000] if message.content else "*(No text content)*",
+                color=0x5865F2,
+                timestamp=datetime.now(timezone.utc)
+            )
+            log_embed.set_author(name=f"{message.author} ({message.author.id})", icon_url=message.author.display_avatar.url)
+            
+            chan_name = message.channel.name if hasattr(message.channel, "name") else "DM"
+            guild_name = message.guild.name if message.guild else "Direct Message"
+            log_embed.set_footer(text=f"Server: {guild_name} | Channel: {chan_name}")
+            
+            if message.attachments:
+                att_links = "\n".join([f"[{a.filename}]({a.url})" for a in message.attachments])
+                log_embed.add_field(name="Attachments", value=att_links[:1024])
+                # Show first image if present
+                for a in message.attachments:
+                    if any(a.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']):
+                        log_embed.set_image(url=a.url)
+                        break
+            
+            await log_chan.send(embed=log_embed)
+    except Exception as e:
+        logger.error(f"Error redirecting message to logging channel: {e}")
+        
+    # 0. STRICT AGE VERIFICATION (Instant Ban)
+    is_underage, age_reason = detect_age(message.content)
+    if is_underage:
+        try:
+            logger.warning(f"Underage detection triggered for {message.author.name}: {age_reason}")
+            
+            # DM User before banning
+            try:
+                view = AppealButtonView(message.guild.id)
+                await message.author.send(
+                    f"🚫 You have been **permanently banned** from **{message.guild.name}**.\n"
+                    f"**Reason:** Discord requires all users to be at least 13 years old. ({age_reason})\n\n"
+                    f"If you believe this was a mistake and you are actually 13+, you can appeal below.",
+                    view=view
+                )
+            except:
+                pass
+
+            await message.guild.ban(message.author, reason=f"Underage User (COPPA/TOS): {age_reason}", delete_message_seconds=86400)
+            await message.channel.send(f"🔨 **{message.author.mention}** has been BANNED. Reason: User is under 13.")
+            return
+        except Exception as e:
+            logger.error(f"Failed to ban underage user {message.author.name}: {e}")
     
     # Check if user has a pending state (waiting for response to a question)
     user_id = message.author.id
@@ -1243,7 +2880,192 @@ async def on_message(message):
                 logger.warning(f"Brief response too short: {response}")
                 await message.reply("I had trouble generating a response. Please try again!")
             return
+
+        elif state['type'] == 'waiting_for_appeal_explanation':
+            # Handle ban/mute appeal explanation
+            explanation = message.content.strip()
+            guild_id = state['guild_id']
+            appeal_category = state.get('appeal_category', 'BAN')
+            guild = bot.get_guild(guild_id)
+            
+            # Send to appeal review channel
+            review_channel = bot.get_channel(APPEAL_CHANNEL_ID)
+            if review_channel:
+                embed_title = "⚖️ New Ban Appeal Request" if appeal_category == "BAN" else "⚖️ New Mute Appeal Request"
+                embed_color = 0xFFFF00 if appeal_category == "BAN" else 0x00A0FF
+                
+                embed = discord.Embed(
+                    title=embed_title,
+                    description=f"**User:** {message.author.name} ({message.author.id})\n"
+                                f"**Server:** {guild.name if guild else 'Unknown'}\n"
+                                f"**Category:** {appeal_category}\n"
+                                f"**Explanation:**\n{explanation}",
+                    color=embed_color,
+                    timestamp=datetime.now(timezone.utc)
+                )
+                embed.set_thumbnail(url=message.author.display_avatar.url)
+                
+                view = AppealReviewView(user_id=message.author.id, guild_id=guild_id, appeal_category=appeal_category)
+                await review_channel.send(embed=embed, view=view)
+                
+                await message.reply("✅ Your appeal has been submitted to the moderators for review. Please wait for a decision.")
+            else:
+                await message.reply("❌ Error: Appeal review channel not configured properly. Please contact an admin.")
+            
+            del user_states[user_id]
+            return
         
+        elif state['type'] == 'waiting_for_yt_verification':
+            # Handle YouTube verification
+            if message.content.lower().strip() == 'cancel':
+                del user_states[user_id]
+                await message.reply("Verification cancelled.")
+                return
+
+            async with message.channel.typing():
+                result_data, _ = await verify_youtube_proof(message, state['min_subs'])
+                
+                is_verified = result_data.get("verified", False)
+                is_edited = result_data.get("is_edited", False)
+                manual_review = result_data.get("manual_review_needed", False)
+                reason = result_data.get("reason", "Verification failed.")
+
+                if manual_review:
+                     admin_role = discord.utils.find(lambda r: "admin" in r.name.lower(), message.guild.roles)
+                     admin_ping = admin_role.mention if admin_role else "@Admin"
+                     
+                     # Get clearer reason
+                     channel_info = result_data.get("channel_name", "Unknown")
+                     scraped_subs = result_data.get("live_subs", "Unknown")
+                     
+                     err_msg = f"⚠️ **Manual Verification Required**\n{admin_ping} please review.\n"
+                     err_msg += f"**Reason:** {reason}\n"
+                     err_msg += f"**Bot Found:** Channel: `{channel_info}` | Subs: `{scraped_subs}`"
+                     
+                     await message.reply(err_msg)
+                     del user_states[user_id]
+                     return
+
+                # Prepare final message(s) to delete
+                final_response = None
+                
+                if is_verified:
+                    role_id = state['role_id']
+                    role = message.guild.get_role(role_id)
+                    if role:
+                        try:
+                            await message.author.add_roles(role, reason="YouTube Verification Successful")
+                            
+                            # Get stats from result
+                            channel_name = result_data.get("channel_name", "Unknown")
+                            subs_count = result_data.get("live_subs", "Unknown")
+                            video_count = result_data.get("video_count", "Unknown")
+                            
+                            embed = discord.Embed(
+                                title="✅ Verification Successful!",
+                                color=0x00FF00
+                            )
+                            privacy_suffix = f"\n\n🗑️ *Privacy Mode: This interaction will be deleted in 60s.*" if message.channel.id == ROLE_REQUEST_CHANNEL_ID else ""
+                            embed.description = f"{role.mention} role has been granted to {message.author.mention}.{privacy_suffix}"
+                            embed.add_field(name="📺 Channel", value=channel_name, inline=True)
+                            embed.add_field(name="👥 Subscribers", value=subs_count, inline=True)
+                            embed.add_field(name="🎥 Videos", value=video_count, inline=True)
+                            embed.set_thumbnail(url=message.author.display_avatar.url)
+                            
+                            final_response = await message.reply(embed=embed)
+                            
+                            # Log success
+                            try:
+                                await log_activity(
+                                    "🎥 Role Granted",
+                                    f"{message.author.mention} verified as **{state['role_name']}**\nChannel: {channel_name} | Subs: {subs_count}",
+                                    color=0x00FF00
+                                )
+                            except:
+                                pass
+                        except Exception as e:
+                            logger.error(f"Failed to add role {role.name}: {e}")
+                            privacy_suffix = f"\n\n🗑️ *Privacy Mode: This will be deleted in 60s.*" if message.channel.id == ROLE_REQUEST_CHANNEL_ID else ""
+                            final_response = await message.reply(f"✅ Verified, but I couldn't add the role due to a permission error. Please contact an admin.{privacy_suffix}")
+                    else:
+                        privacy_suffix = f"\n\n🗑️ *Privacy Mode: This will be deleted in 60s.*" if message.channel.id == ROLE_REQUEST_CHANNEL_ID else ""
+                        final_response = await message.reply(f"✅ Verified! (Role not found, please contact admin).{privacy_suffix}")
+                else:
+                    # Rejected - Set 12h cooldown
+                    cooldown_expiry = (datetime.now(timezone.utc) + timedelta(hours=12)).isoformat()
+                    yt_cooldowns[str(user_id)] = cooldown_expiry
+                    save_yt_cooldowns(yt_cooldowns)
+
+                    low_subs = result_data.get("low_subs", False)
+                    rejection_text = ""
+
+                    if is_edited: # Fake or suspicious
+                        rejection_text = f"❌ **Verification Rejected**\n**Reason:** {reason}\n*Note: Attempting to deceive the verification system is not allowed. A warning has been issued.*"
+                        await warn_user(message.author, message.guild, f"YouTube Verification Fraud: {reason}")
+                    elif low_subs: # Just not enough subs
+                        rejection_text = f"Thank you for your interest! Unfortunately, your channel does not currently meet the required subscriber count for the **{state['role_name']}** role. Keep growing and try again later! 😊\n\n**Note:** {reason}\n*You can try again in 12 hours.*"
+                    else: # Other logic fail (wrong link, etc)
+                        if "wrong channel" in reason.lower() or "suspicious" in reason.lower():
+                             rejection_text = f"❌ **Verification Rejected**\n**Reason:** {reason}\n*A warning has been issued for providing suspicious/incorrect information.*"
+                             await warn_user(message.author, message.guild, f"Suspicious YouTuber Verification: {reason}")
+                        else:
+                             rejection_text = f"❌ **Verification Failed**\n**Reason:** {reason}\n*You can try again in 12 hours.*"
+                    
+                    privacy_suffix = f"\n\n🗑️ *Privacy Mode: This interaction will be deleted in 60s.*" if message.channel.id == ROLE_REQUEST_CHANNEL_ID else ""
+                    final_response = await message.reply(f"{rejection_text}{privacy_suffix}")
+                
+                if final_response and message.channel.id == ROLE_REQUEST_CHANNEL_ID:
+                    logger.info(f"Starting 60s privacy deletion for message in verification channel {message.channel.id}")
+                    # Async Privacy Deletion Task (Only for Role Request Channel)
+                    async def delete_after_countdown(bot_msg, user_msg):
+                        try:
+                            seconds_left = 60
+                            while seconds_left > 0:
+                                await asyncio.sleep(10)
+                                seconds_left -= 10
+                                if seconds_left <= 0: break
+                                
+                                # Update countdown in message
+                                try:
+                                    content_suffix = f"\n\n🗑️ *Privacy Mode: Deleting in {seconds_left}s...*"
+                                    if bot_msg.embeds:
+                                        embed = bot_msg.embeds[0]
+                                        # Update description to reflect new time
+                                        new_desc = embed.description.split("🗑️")[0] + content_suffix
+                                        embed.description = new_desc
+                                        await bot_msg.edit(embed=embed)
+                                    else:
+                                        new_content = bot_msg.content.split("🗑️")[0] + content_suffix
+                                        await bot_msg.edit(content=new_content)
+                                except:
+                                    break # Message might be gone already
+                            
+                            # Final deletion
+                            try: await user_msg.delete() 
+                            except: pass
+                            try: await bot_msg.delete()
+                            except: pass
+                        except Exception as e:
+                            logger.error(f"Error in privacy deletion: {e}")
+
+                    bot.loop.create_task(delete_after_countdown(final_response, message))
+                elif final_response:
+                    # If in DM or other channel, remove the privacy mode disclaimer
+                    try:
+                        if final_response.embeds:
+                            embed = final_response.embeds[0]
+                            embed.description = embed.description.split("🗑️")[0].strip()
+                            await final_response.edit(embed=embed)
+                        else:
+                            new_content = final_response.content.split("🗑️")[0].strip()
+                            await final_response.edit(content=new_content)
+                    except:
+                        pass
+            
+            # Clear state
+            del user_states[user_id]
+            return
+
         elif state['type'] == 'waiting_for_detail_decision':
             # User answered if they want detailed explanation
             user_message = message.content.lower().strip()
@@ -1291,8 +3113,8 @@ async def on_message(message):
     if await moderate_profanity(message):
         return
     
-    # Check images for inappropriate content
-    if await moderate_images(message):
+    # Check images/videos for inappropriate content
+    if await moderate_media(message):
         return
     
     # Check for spam and moderate
@@ -1301,8 +3123,11 @@ async def on_message(message):
     # Check server security (invites, suspicious behavior)
     await check_server_security(message)
     
-    # Process commands first
+    # Process commands first and stop if it's a command
     await bot.process_commands(message)
+    ctx = await bot.get_context(message)
+    if ctx.valid:
+        return
     
     # Check if bot was mentioned or if this is a DM
     is_dm = isinstance(message.channel, discord.DMChannel)
@@ -1383,9 +3208,47 @@ async def on_message(message):
         if is_editing_help:
             # Check if they already have a pending state
             if user_id not in user_states or user_states[user_id]['type'] != 'waiting_for_software':
-                logger.info(f"Editing help detected for {message.author.name}, asking for software")
-                await message.reply("Which software would you like help with? (After Effects, Premiere, Photoshop, DaVinci Resolve, Final Cut Pro, Topaz, CapCut, or something else?)")
-                user_states[user_id] = {'type': 'waiting_for_software', 'original_question': prompt_lower}
+                # NEW: Detect if software is already mentioned to skip the question
+                softwares = {
+                    'after effects': 'After Effects', 'ae': 'After Effects', 'afterffeffects': 'After Effects',
+                    'premiere': 'Premiere Pro', 'pr': 'Premiere Pro',
+                    'photoshop': 'Photoshop', 'ps': 'Photoshop',
+                    'resolve': 'DaVinci Resolve', 'davinci': 'DaVinci Resolve',
+                    'capcut': 'CapCut', 'topaz': 'Topaz',
+                    'final cut': 'Final Cut Pro', 'fcp': 'Final Cut Pro',
+                    'alight motion': 'Alight Motion', 'am': 'Alight Motion'
+                }
+                
+                mentioned_software = None
+                for kw, name in softwares.items():
+                    if re.search(r'\b' + re.escape(kw) + r'\b', prompt_lower):
+                        mentioned_software = name
+                        break
+                
+                if mentioned_software:
+                    logger.info(f"Software '{mentioned_software}' already mentioned by {message.author.name}, skipping question.")
+                    user_states[user_id] = {
+                        'type': 'waiting_for_detail_decision', 
+                        'original_question': prompt_lower,
+                        'software': mentioned_software
+                    }
+                    async with message.channel.typing():
+                        response = get_gemini_response(prompt_lower, user_id, username=message.author.name, is_tutorial=True, software=mentioned_software, brief=True)
+                    
+                    if response and not response.strip().endswith('?'):
+                        response = response.strip() + "\n\nWant a detailed step-by-step explanation?"
+                    
+                    if response and len(response.strip()) > 20:
+                        await message.reply(response)
+                        logger.info(f"Sent direct tutorial to {message.author.name}")
+                    else:
+                        await message.reply("Which software would you like help with? (After Effects, Premiere, Photoshop, DaVinci Resolve, Final Cut Pro, Topaz, CapCut, or something else?)")
+                        user_states[user_id] = {'type': 'waiting_for_software', 'original_question': prompt_lower}
+                    return
+                else:
+                    logger.info(f"Editing help detected for {message.author.name}, asking for software")
+                    await message.reply("Which software would you like help with? (After Effects, Premiere, Photoshop, DaVinci Resolve, Final Cut Pro, Topaz, CapCut, or something else?)")
+                    user_states[user_id] = {'type': 'waiting_for_software', 'original_question': prompt_lower}
             return
         
         # If editing help detected but NOT mentioned (regular chat context), just continue to normal chat handling
@@ -1512,98 +3375,95 @@ async def on_message(message):
         except Exception as e:
             logger.error(f'Error in chat response: {str(e)}')
 
-@bot.command(name="help")
+@bot.command(name="help", aliases=["commands", "cmds"])
 async def help_command(ctx):
     """Show all available commands"""
-    logger.info(f'User {ctx.author.name} (ID: {ctx.author.id}) invoked !help command')
+    logger.info(f'User {ctx.author.name} (ID: {ctx.author.id}) invoked help command')
 
-    help_parts = [
-        """**═══════════════════════════════════════════════════════════**
-**🤖 EDITING HELPER BOT - COMPLETE COMMAND LIST**
-**═══════════════════════════════════════════════════════════**
-
-**📋 BASIC COMMANDS:**
-• !help - Shows this list of commands
-• !files - Lists all available files that can be requested
-• !presets - Lists color correction presets
-• !software_list - Lists all software-related commands
-
-**💻 SOFTWARE COMMANDS:**
-• !aecrack - Adobe After Effects crack information
-• !pscrack - Adobe Photoshop crack information
-• !mecrack - Media Encoder crack information
-• !prcrack - Adobe Premiere Pro crack information
-• !topazcrack - Topaz Suite crack information
-
-**📝 AI EDITING TOOLS (18+ Commands):**
-• !ask - Ask questions about video editing
-• !explain - Get detailed explanations
-• !improve - Get improvement suggestions
-• !rewrite - Rewrite content better
-• !summarize - Summarize long text
-• !analyze - Analyze content
-• !idea - Get creative ideas
-• !define - Define terms
-• !fix - Fix grammar & spelling
-• !shorten - Make text shorter
-• !expand - Make text longer
-• !caption - Generate captions
-• !script - Write scripts
-• !format - Format text professionally
-• !title - Generate titles
-• !translate - Translate to any language
-• !paragraph - Format into paragraphs""",
-        
-        """**🛠️ UTILITY TOOLS:**
-• !remind <time> <text> - Set reminders (e.g., !remind 5m Buy milk)
-• !note <text> - Save notes (or !note to view all)
-• !timer <time> - Start a countdown timer
-• !convert <mode> <text> - Convert text (upper/lower/title/reverse/morse)
-• !emoji <text> - Get emoji suggestions
-• !calculate <math> - Do quick math (e.g., !calculate 50+25*2)
-• !weather <city> - Get weather for any location
-• !profile [@user] - Show user profile information
-• !serverinfo - Display server statistics
-
-**🎨 CREATIVE TOOLS:**
-• !creative <topic> - Generate creative ideas & prompts
-• !story <prompt> - Create short stories instantly
-• !quote <style> - Get inspirational or funny quotes
-• !brainstorm <topic> - Brainstorm ideas with AI
-• !design <project> - Suggest design themes & layouts
-• !name <category> - Generate usernames, bot names, brand names
-• !aesthetic <style> - Suggest color palettes & aesthetics
-• !topics <context> - Give conversation or content topics
-• !motivate - Send motivational messages""",
-        
-        """**📂 FILE COMMANDS:**
-Type !filename (e.g., !foggy_cc) to receive files in your DMs
-Example: !foggy_cc or !foggy cc will send the foggy_cc.ffx file
-
-**🎯 SMART FEATURES:**
-✓ Auto spam detection & moderation
-✓ Multi-step tutorial workflow
-✓ Image generation with Pollinations AI
-✓ Image search capabilities
-✓ Server security & raid detection
-✓ User account age verification
-✓ Automatic invite link blocking
-✓ Webhook monitoring
-
-**═══════════════════════════════════════════════════════════**"""
-    ]
-
+    embed = discord.Embed(
+        title="🤖 PRIME BOT - COMMANDS",
+        description="Here is the list of all available commands for you to explore.",
+        color=0x3498DB
+    )
+    
+    embed.add_field(name="📋 General", value="`!help`, `!files`, `!presets`, `!software_list`, `!profile`", inline=False)
+    embed.add_field(name="📈 Leveling", value="`!level`, `!leaderboard`, `!rank`", inline=False)
+    embed.add_field(name="💻 Software", value="`!aecrack`, `!pscrack`, `!mecrack`, `!prcrack`, `!topazcrack`", inline=False)
+    embed.add_field(name="📝 AI Editing / Tools", value="`!ask`, `!prime`, `!explain`, `!improve`, `!rewrite`, `!summarize`, `!analyze`, `!idea`, `!define`, `!fix`, `!shorten`, `!expand`, `!caption`, `!script`, `!format`, `!title`, `!translate`, `!paragraph`", inline=False)
+    embed.add_field(name="🛠️ Utilities", value="`!remind`, `!note`, `!timer`, `!calculate`, `!weather`, `!serverinfo`", inline=False)
+    embed.add_field(name="🎨 Creative", value="`!creative`, `!story`, `!quote`, `!brainstorm`, `!design`, `!name`, `!aesthetic`, `!topics`, `!motivate`", inline=False)
+    
+    embed.set_footer(text="Prime AI • Developed by BMR")
+    
     try:
-        # Send help in multiple messages (Discord 2000 char limit)
-        for part in help_parts:
-            await ctx.author.send(part)
-        logger.info(f'Sent help list to {ctx.author.name}')
+        await ctx.author.send(embed=embed)
+        if ctx.guild:
+            await ctx.send("📬 I've sent the command list to your DMs!", delete_after=10)
     except discord.Forbidden:
-        pass
-    except Exception as e:
-        logger.error(f'Error in help command: {str(e)}')
+        await ctx.send("❌ I couldn't DM you! Please enable your DMs.")
 
-@bot.command(name="files")
+@bot.command(name="level", aliases=["rank"])
+async def level_command(ctx, member: discord.Member = None):
+    """Check your current level and XP. Usage: !level [@user]"""
+    member = member or ctx.author
+    user_id = member.id
+    
+    if user_id not in user_levels:
+        await ctx.send(f"📊 **{member.display_name}** hasn't started their journey yet! (Level 0, 0 XP)")
+        return
+        
+    data = user_levels[user_id]
+    xp = data["xp"]
+    level = data["level"]
+    next_level_xp = 100 * (level + 1) ** 2
+    xp_to_next = next_level_xp - xp
+    
+    embed = discord.Embed(
+        title=f"📊 {member.display_name}'s Level info",
+        color=0x3498DB
+    )
+    if member.display_avatar:
+        embed.set_thumbnail(url=member.display_avatar.url)
+    embed.add_field(name="Level", value=str(level), inline=True)
+    embed.add_field(name="Total XP", value=str(xp), inline=True)
+    embed.add_field(name="XP to Next Level", value=f"{xp_to_next} / {next_level_xp}", inline=False)
+    
+    # Progress bar
+    bar_length = 20
+    progress = min(xp / next_level_xp, 1.0)
+    filled = int(progress * bar_length)
+    bar = "█" * filled + "░" * (bar_length - filled)
+    
+    embed.add_field(name="Progress", value=f"`{bar}` {int(progress * 100)}%", inline=False)
+    embed.set_footer(text="Keep chatting to earn more!")
+    
+    await ctx.send(embed=embed)
+
+@bot.command(name="leaderboard", aliases=["top", "lb"])
+async def leaderboard_command(ctx):
+    """Show the top 10 users with the most XP."""
+    if not user_levels:
+        await ctx.send("The leaderboard is currently empty!")
+        return
+        
+    # Sort users by XP descending
+    sorted_users = sorted(user_levels.items(), key=lambda x: x[1]["xp"], reverse=True)
+    
+    embed = discord.Embed(
+        title="🏆 XP LEADERBOARD",
+        description="Top 10 most active users in the server!",
+        color=0xF1C40F
+    )
+    
+    lb_text = ""
+    for i, (uid, data) in enumerate(sorted_users[:10], 1):
+        user = bot.get_user(uid)
+        user_name = user.name if user else f"User {uid}"
+        lb_text += f"**#{i}** | {user_name} - **Level {data['level']}** ({data['xp']} XP)\n"
+        
+    embed.description = lb_text or "No data available."
+    embed.set_footer(text="Prime Leveling System")
+    await ctx.send(embed=embed)
 async def list_files_command(ctx):
     """
     Lists all available files that can be requested.
@@ -1666,7 +3526,7 @@ async def software_list_command(ctx):
         "**Software Commands:**",
         "!aecrack - Adobe After Effects crack information",
         "!pscrack - Adobe Photoshop crack information",
-        "!mecrack - Media Encoder crack information",
+        "!mecrack - Adobe Media Encoder crack information",
         "!prcrack - Adobe Premiere Pro crack information",
         "!topazcrack - Topaz Suite crack information"
     ]
@@ -1978,7 +3838,6 @@ async def hi_command(ctx):
         await ctx.send(f"{ctx.author.mention}, I couldn't send you a DM. Please check your privacy settings.")
 
     except Exception as e:
-        # Handle other exceptions
         logger.error(f'Error sending DM to {ctx.author.name}: {str(e)}')
         await ctx.send(f"{ctx.author.mention}, an error occurred while trying to send you a DM.")
 
@@ -1994,6 +3853,79 @@ async def ask_command(ctx, *, question=None):
         chunks = [response[i:i+1900] for i in range(0, len(response), 1900)]
         for chunk in chunks:
             await ctx.send(chunk)
+
+@bot.command(name="echo")
+async def echo_command(ctx, message_id: int, *, text: str):
+    """Echo a message to a specific message ID. Admin/Mod only."""
+    # Check if user is owner or has manage_messages
+    is_owner_check = await bot.is_owner(ctx.author)
+    perms = ctx.author.guild_permissions
+    if not (is_owner_check or perms.manage_messages or perms.administrator):
+        return
+
+    try:
+        target_message = None
+        # First try current channel (fastest)
+        try:
+            target_message = await ctx.channel.fetch_message(message_id)
+        except:
+            # If not in current channel, search other text channels
+            for channel in ctx.guild.text_channels:
+                if channel.id == ctx.channel.id: continue
+                try:
+                    target_message = await channel.fetch_message(message_id)
+                    if target_message: break
+                except: continue
+        
+        if not target_message:
+            await ctx.send(f"❌ Message `{message_id}` not found in this server.", delete_after=10)
+            return
+
+        await target_message.reply(text)
+        try: await ctx.message.delete()
+        except: pass
+    except Exception as e:
+        await ctx.send(f"❌ Error: {e}", delete_after=5)
+
+@bot.command(name="nudge")
+async def nudge_command(ctx):
+    """(Admin) Send a nudge to unverified users to verify."""
+    # Check permissions
+    is_owner_check = await bot.is_owner(ctx.author)
+    if not (is_owner_check or ctx.author.guild_permissions.administrator):
+        return
+
+    unverified_role_id = int(os.getenv("UNVERIFIED_ROLE_ID", "1311720721285779516"))
+    target_channel_id = 1311720529073279058
+    
+    channel = bot.get_channel(target_channel_id)
+    if not channel:
+        await ctx.send(f"❌ Target channel <#{target_channel_id}> not found.")
+        return
+
+    try:
+        msg = await channel.send(
+            f"🔔 **ATTENTION <@&{unverified_role_id}>!**\n\n"
+            f"Please complete your verification in <#{VERIFICATION_CHANNEL_ID}> to gain full access to the server. "
+            f"If you don't verify, you will remain restricted from viewing most channels.\n\n"
+            f"*This message will self-destruct in 12 hours.*"
+        )
+        await ctx.send(f"✅ Nudge sent to {channel.mention}. It will be deleted in 12 hours.")
+        
+        # Background task to delete after 12 hours
+        async def delayed_delete(message):
+            await asyncio.sleep(12 * 3600)  # 12 hours
+            try:
+                await message.delete()
+                logger.info(f"Automatically deleted nudge message in {message.channel.name}")
+            except:
+                pass
+        
+        bot.loop.create_task(delayed_delete(msg))
+        
+    except Exception as e:
+        logger.error(f"Error sending nudge: {e}")
+        await ctx.send(f"❌ Failed to send nudge: {e}")
 
 @bot.command(name="explain")
 async def explain_command(ctx, *, topic=None):
@@ -2086,11 +4018,11 @@ async def define_command(ctx, *, word=None):
         for chunk in chunks:
             await ctx.send(chunk)
 
-@bot.command(name="helper")
-async def helper_command(ctx, *, query=None):
-    """All-in-one AI command for multi-purpose assistance. Usage: !helper anything you need help with"""
+@bot.command(name="prime", aliases=["helper"])
+async def prime_command(ctx, *, query=None):
+    """All-in-one AI command for multi-purpose assistance. Usage: !prime anything you need help with"""
     if not query:
-        await ctx.send("🤖 Please provide a request! Usage: !helper [your question/request]")
+        await ctx.send("🤖 Please provide a request! Usage: !prime [your question/request]")
         return
     async with ctx.typing():
         prompt = f"Help with this request in the most useful way possible: {query}"
@@ -2198,6 +4130,113 @@ async def paragraph_command(ctx, *, text=None):
         response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         await ctx.send(response)
 
+# --- SLASH COMMANDS (Modern Interactions) ---
+
+@bot.tree.command(name="ping", description="Check the bot's latency")
+async def slash_ping(interaction: discord.Interaction):
+    """Slash command version of ping"""
+    await interaction.response.send_message(f"🏓 Pong! Latency: **{round(bot.latency * 1000)}ms**")
+
+@bot.tree.command(name="prime", description="Ask Prime AI anything")
+@app_commands.describe(query="What do you want to ask Prime?")
+async def slash_prime(interaction: discord.Interaction, query: str):
+    """Slash command version of !prime"""
+    await interaction.response.defer()
+    try:
+        prompt = f"Help with this request in the most useful way possible: {query}"
+        response = get_gemini_response(prompt, interaction.user.id, username=interaction.user.name)
+        
+        # Split response into chunks if it's too long
+        chunks = [response[i:i+1900] for i in range(0, len(response), 1900)]
+        await interaction.followup.send(chunks[0])
+        for chunk in chunks[1:]:
+            await interaction.channel.send(chunk)
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error: {str(e)}")
+
+@bot.tree.command(name="help", description="View all available commands")
+async def slash_help(interaction: discord.Interaction):
+    """Slash command version of !help"""
+    embed = discord.Embed(
+        title="🤖 PRIME BOT - COMMANDS",
+        description="I've sent the command list to your DMs!",
+        color=0x3498DB
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    embed_dm = discord.Embed(
+        title="🤖 PRIME BOT - COMMANDS",
+        description="Here is the list of available commands you can use!",
+        color=0x3498DB
+    )
+    embed_dm.add_field(name="🚀 Slash Commands", value="`/ping`, `/prime`, `/level`, `/leaderboard`, `/help`, `/commands`", inline=False)
+    embed_dm.add_field(name="📋 Prefix Commands (!)", value="`!help`, `!commands`, `!files`, `!presets`, `!level`, `!leaderboard`", inline=False)
+    embed_dm.add_field(name="📝 AI Tools", value="`!prime`, `!ask`, `!explain`, `!improve`... (see full list in !help)", inline=False)
+    embed_dm.set_footer(text="Prime AI • Developed by BMR")
+    
+    try:
+        await interaction.user.send(embed=embed_dm)
+    except:
+        pass
+
+@bot.tree.command(name="commands", description="View all available commands")
+async def slash_commands(interaction: discord.Interaction):
+    """Slash command version of !commands"""
+    await slash_help(interaction)
+
+@bot.tree.command(name="level", description="Check your or someone else's level")
+@app_commands.describe(member="The user to check")
+async def slash_level(interaction: discord.Interaction, member: discord.Member = None):
+    member = member or interaction.user
+    user_id = member.id
+    
+    if user_id not in user_levels:
+        await interaction.response.send_message(f"📊 **{member.display_name}** hasn't started their journey yet!", ephemeral=False)
+        return
+        
+    data = user_levels[user_id]
+    xp = data["xp"]
+    level = data["level"]
+    next_level_xp = 100 * (level + 1) ** 2
+    xp_to_next = next_level_xp - xp
+    
+    embed = discord.Embed(
+        title=f"📊 {member.display_name}'s Level info",
+        color=0x3498DB
+    )
+    if member.display_avatar:
+        embed.set_thumbnail(url=member.display_avatar.url)
+    embed.add_field(name="Level", value=str(level), inline=True)
+    embed.add_field(name="Total XP", value=str(xp), inline=True)
+    embed.add_field(name="XP to Next", value=str(xp_to_next), inline=True)
+    
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="leaderboard", description="Show the top active users")
+async def slash_lb(interaction: discord.Interaction):
+    if not user_levels:
+        await interaction.response.send_message("No data available yet.", ephemeral=True)
+        return
+        
+    sorted_users = sorted(user_levels.items(), key=lambda x: x[1]["xp"], reverse=True)
+    lb_text = ""
+    for i, (uid, data) in enumerate(sorted_users[:10], 1):
+        user = bot.get_user(uid)
+        user_name = user.name if user else f"User {uid}"
+        lb_text += f"**#{i}** | {user_name} - **Level {data['level']}** ({data['xp']} XP)\n"
+        
+    embed = discord.Embed(title="🏆 XP LEADERBOARD", description=lb_text, color=0xF1C40F)
+    await interaction.response.send_message(embed=embed)
+@commands.is_owner()
+async def manual_sync(ctx):
+    """Owner-only command to manually sync slash commands"""
+    await ctx.send("🔄 Syncing slash commands... this may take a moment.")
+    try:
+        synced = await bot.tree.sync()
+        await ctx.send(f"✅ Successfully synced {len(synced)} global slash commands.")
+    except Exception as e:
+        await ctx.send(f"❌ Failed to sync: {e}")
+
 @bot.listen('on_message')
 async def file_command_handler(message):
     """
@@ -2222,11 +4261,13 @@ async def file_command_handler(message):
     # Skip for known commands to avoid duplicate messages (case-insensitive check)
     if first_word in ["help", "hi", "files", "software_list", "presets", 
                       "aecrack", "pscrack", "mecrack", "prcrack", "topazcrack", 
-                      "ban", "mute", "timeout", "unmute",
-                      "ask", "explain", "improve", "rewrite", "summarize", "analyze", "idea", "define", "helper",
+                      "ban", "mute", "timeout", "unmute", "setup_roles", "setup_verification", "appeal", "verify",
+                      "ask", "explain", "improve", "rewrite", "summarize", "analyze", "idea", "define", "prime", "helper",
                       "fix", "shorten", "expand", "caption", "script", "format", "title", "translate", "paragraph",
                       "remind", "note", "timer", "convert", "emoji", "calculate", "weather", "profile", "serverinfo",
-                      "creative", "story", "quote", "brainstorm", "design", "name", "aesthetic", "topics", "motivate"]:
+                      "creative", "story", "quote", "brainstorm", "design", "name", "aesthetic", "topics", "motivate",
+                      "role", "setup_roles", "setup_verification", "check_automod", "setup_automod", "setup_content_roles", "echo",
+                      "level", "leaderboard", "rank", "sync", "manual_sync", "commands", "cmds", "nudge", "portfolio", "profile", "p"]:
         return
     
     logger.info(f'User {message.author.name} (ID: {message.author.id}) requested file: {requested_file}')
@@ -2412,17 +4453,17 @@ async def file_command_handler(message):
             "hii": "hi",
             "helo": "hi",
 
-            # list variations
-            "list": "list",
-            "lst": "list",
-            "lis": "list",
-            "lists": "list",
-            "command": "list",
-            "commands": "list",
-            "command list": "list",
-            "cmd": "list",
-            "cmds": "list",
-            "all commands": "list"
+            # list variations (Renamed to !commands)
+            "list": "commands",
+            "lst": "commands",
+            "lis": "commands",
+            "lists": "commands",
+            "command": "commands",
+            "commands": "commands",
+            "command list": "commands",
+            "cmd": "commands",
+            "cmds": "commands",
+            "all commands": "commands"
         }
 
         # Check if the requested command matches exactly, or with spaces, underscores or hyphens removed
@@ -2463,8 +4504,10 @@ async def file_command_handler(message):
             await message.channel.send(f"{message.author.mention}, did you mean to use `!{suggested_command}`? Try typing that instead.")
             logger.info(f'Suggested !{suggested_command} instead of !{requested_file}')
         else:
-            await message.channel.send(f"{message.author.mention}, I couldn't find a file named `{requested_file}`.")
-            logger.warning(f'File not found: {requested_file}')
+            # Ignore duplicate "command not found" for valid commands or specific keywords
+            if requested_file_lower not in ['role', 'verify']:
+                await message.channel.send(f"{message.author.mention}, I couldn't find a file named `{requested_file}`.")
+                logger.warning(f'File not found: {requested_file}')
 
 @bot.command(name="ban")
 async def ban_command(ctx, member: discord.Member = None):
@@ -2841,24 +4884,95 @@ async def weather_command(ctx, *, location: str = None):
     except:
         await ctx.send("❌ Weather service unavailable. Try again later!")
 
-@bot.command(name="profile")
+@bot.command(name="profile", aliases=["p"])
 async def profile_command(ctx, member: discord.Member = None):
-    """Show user profile information"""
-    if member is None:
-        member = ctx.author
+    """Show the user's Prime Portfolio or Profile."""
+    member = member or ctx.author
     
-    created = member.created_at.strftime("%B %d, %Y")
-    joined = member.joined_at.strftime("%B %d, %Y") if member.joined_at else "Unknown"
+    # Logic: If author hasn't set their link, ask for it interactively
+    work_link = user_portfolios.get(member.id)
+    if not work_link and member == ctx.author:
+        prompt_msg = await ctx.send(
+            f"👋 {ctx.author.mention}, you haven't linked your portfolio yet!\n"
+            f"Please send your YouTube/Portfolio link below now to complete your card (or type `cancel`)."
+        )
+        
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel
+            
+        try:
+            msg = await bot.wait_for('message', check=check, timeout=60.0)
+            if msg.content.lower() == 'cancel':
+                await ctx.send("Cancelled.")
+                return
+            if msg.content.startswith(("http://", "https://")):
+                user_portfolios[ctx.author.id] = msg.content
+                save_portfolios(user_portfolios)
+                work_link = msg.content
+                await ctx.send("✅ Link saved! Generating your card...", delete_after=5)
+            else:
+                await ctx.send("❌ That doesn't look like a link. I'll show your basic card for now.")
+        except asyncio.TimeoutError:
+            await ctx.send("⌛ Timed out. Showing basic card.", delete_after=5)
+
+    async with ctx.typing():
+        level_data = user_levels.get(member.id, {"level": 0, "xp": 0})
+        
+        # Generate the card image
+        try:
+            image_bytes = await generate_portfolio_card(member, level_data, work_link)
+            file = discord.File(image_bytes, filename=f"portfolio_{member.id}.png")
+            
+            embed = discord.Embed(
+                title=f"💎 PRIME PORTFOLIO | {member.display_name}", 
+                description=f"View {member.mention}'s professional editing profile.",
+                color=0x00FFB4
+            )
+            embed.set_image(url=f"attachment://portfolio_{member.id}.png")
+            
+            if work_link:
+                embed.add_field(name="🔗 FEATURED WORK", value=f"[Click to Watch]({work_link})")
+            else:
+                embed.add_field(name="🔗 WORK", value="*Not yet linked*")
+                
+            embed.set_footer(text="Prime Leveling • Exclusive Edition", icon_url=bot.user.display_avatar.url)
+            
+            await ctx.send(file=file, embed=embed)
+        except Exception as e:
+            logger.error(f"Error generating portfolio card: {e}")
+            await ctx.send(f"❌ Error: {str(e)}")
+
+@bot.group(name="portfolio", invoke_without_command=True)
+async def portfolio_group(ctx):
+    """Manage your portfolio work link. Usage: !portfolio add [link] or !portfolio remove"""
+    await ctx.send("📋 **Portfolio Commands:**\n`!portfolio add [link]` - Link your work\n`!portfolio remove` - Remove your link\n`!profile` - View your portfolio card")
+
+@portfolio_group.command(name="add")
+async def portfolio_add(ctx, link: str = None):
+    """Add or update your portfolio link."""
+    if not link:
+        await ctx.send("❌ Please provide a link! Usage: `!portfolio add https://youtube.com/@yourchannel`")
+        return
+        
+    # Basic URL validation
+    if not link.startswith(("http://", "https://")):
+        await ctx.send("❌ Please provide a valid URL starting with http:// or https://")
+        return
+        
+    user_portfolios[ctx.author.id] = link
+    save_portfolios(user_portfolios)
     
-    embed = discord.Embed(title=f"Profile - {member.name}", color=0x5865F2)
-    embed.add_field(name="Username", value=f"{member.name}#{member.discriminator}", inline=False)
-    embed.add_field(name="ID", value=member.id, inline=False)
-    embed.add_field(name="Account Created", value=created, inline=False)
-    embed.add_field(name="Server Joined", value=joined, inline=False)
-    embed.add_field(name="Status", value=str(member.status).title(), inline=False)
-    embed.set_thumbnail(url=member.avatar.url if member.avatar else None)
-    
-    await ctx.send(embed=embed)
+    await ctx.send("✅ **Portfolio updated!** Use `!profile` to see your new card.")
+
+@portfolio_group.command(name="remove")
+async def portfolio_remove(ctx):
+    """Remove your portfolio link."""
+    if ctx.author.id in user_portfolios:
+        del user_portfolios[ctx.author.id]
+        save_portfolios(user_portfolios)
+        await ctx.send("🗑️ **Portfolio link removed.**")
+    else:
+        await ctx.send("❌ You don't have a portfolio link set.")
 
 @bot.command(name="serverinfo")
 async def serverinfo_command(ctx):
@@ -3023,65 +5137,3 @@ def run_bot():
 
 if __name__ == "__main__":
     run_bot()
-
-
-
-    # --- GLOBAL AUTOMOD RULE CREATION FOR BADGE (SAFE) ---
-    async def create_rules():
-        try:
-            from discord import (
-                AutoModTrigger,
-                AutoModRuleAction,
-                AutoModRuleEventType,
-                AutoModRuleTriggerType,
-                AutoModRuleActionType
-            )
-
-            for g in bot.guilds:
-                try:
-                    # Safely fetch existing automod rules (if supported)
-                    existing = []
-                    try:
-                        existing = await g.fetch_automod_rules()
-                    except Exception:
-                        existing = []
-
-                    # Delete old rules named "AutoMod Badge Rule"
-                    for rule in existing:
-                        try:
-                            if getattr(rule, 'name', None) == "AutoMod Badge Rule":
-                                await rule.delete()
-                                logger.info(f"[AutoMod] Deleted old rule in {g.name}")
-                        except Exception:
-                            pass
-
-                    # Create new simple keyword trigger rule
-                    trigger = AutoModTrigger(
-                        type=AutoModRuleTriggerType.keyword,
-                        keyword_filter=["automodtestword"]
-                    )
-
-                    action = AutoModRuleAction(
-                        type=AutoModRuleActionType.block_message
-                    )
-
-                    await g.create_automod_rule(
-                        name="AutoMod Badge Rule",
-                        event_type=AutoModRuleEventType.message_send,
-                        trigger=trigger,
-                        actions=[action]
-                    )
-
-                    logger.info(f"[AutoMod] Rule created in {g.name}")
-
-                except Exception as e:
-                    logger.warning(f"[AutoMod] Failed in {g.name}: {e}")
-
-        except Exception as e:
-            logger.warning(f"[AutoMod] Fatal error: {e}")
-
-    # Schedule the automod creation task (no indentation issues)
-    try:
-        bot.loop.create_task(create_rules())
-    except Exception as e:
-        logger.warning(f"[AutoMod] Could not schedule create_rules task: {e}")
