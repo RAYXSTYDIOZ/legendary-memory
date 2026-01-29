@@ -47,15 +47,25 @@ bot = commands.Bot(command_prefix='!', intents=intents, case_insensitive=True)
 # Remove default help command to allow for custom implementation
 bot.remove_command('help')
 
-# Configure Gemini AI Key
-primary_key = os.getenv("GEMINI_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("API_KEY")
-GEMINI_KEYS = [primary_key] if primary_key else []
+# Configure Gemini AI Key - Scans for any casing (GEMINI_KEY, Gemini_key, etc.)
+def find_keys():
+    found = []
+    for k, v in os.environ.items():
+        uk = k.upper()
+        if ("GEMINI" in uk and "KEY" in uk) or (uk == "API_KEY"):
+            if v and len(v) > 10: # Basic validation
+                found.append(v.strip())
+    return list(dict.fromkeys(found))
+
+GEMINI_KEYS = find_keys()
 current_key_index = 0
 
 if GEMINI_KEYS:
-    logger.info(f"✅ Gemini API Key detected (Starting with: {GEMINI_KEYS[0][:5]}...)")
+    logger.info(f"✅ SYSTEM: Detected {len(GEMINI_KEYS)} Gemini API Key(s).")
+    # Log the first 4 chars of the first key to help the user confirm it's loaded
+    logger.info(f"✅ SYSTEM: Active Key Starts With: {GEMINI_KEYS[0][:4]}...")
 else:
-    logger.error("❌ NO GEMINI API KEY FOUND IN RAILWAY/ENVIRONMENT VARIABLES")
+    logger.error("❌ CRITICAL: NO API KEY DETECTED. Check Railway Variables for 'Gemini_key'.")
 
 if not GEMINI_KEYS:
     logger.error("❌ NO GEMINI API KEYS FOUND IN ENVIRONMENT")
