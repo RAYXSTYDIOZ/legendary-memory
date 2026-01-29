@@ -2467,79 +2467,79 @@ async def setup_roles(ctx):
 @bot.event
 async def on_ready():
     """Event triggered when the bot is ready and connected to Discord."""
-    global log_channel
-    
-    logger.info(f'Bot connected as {bot.user.name} (ID: {bot.user.id})')
-    logger.info(f'Connected to {len(bot.guilds)} server(s)')
-    logger.info('=' * 50)
-    logger.info('SERVERS YOUR BOT IS IN:')
-    logger.info('=' * 50)
-    for i, guild in enumerate(bot.guilds, 1):
-        logger.info(f'  {i}. {guild.name} (ID: {guild.id}) - {guild.member_count} members')
-    logger.info('=' * 50)
-    logger.info('Bot is ready to receive commands!')
-    
-    # Initialize activity log channel
-    if LOG_CHANNEL_ID:
-        try:
-            log_channel = bot.get_channel(int(LOG_CHANNEL_ID))
-            if log_channel:
-                logger.info(f'Activity log channel set to: #{log_channel.name}')
-                # Send startup log
-                server_list = "\n".join([f"• {g.name} ({g.member_count} members)" for g in bot.guilds])
-                await log_activity(
-                    "🟢 Bot Started",
-                    f"**{bot.user.name}** is now online!",
-                    color=0x00FF00,
-                    fields={
-                        "Servers": len(bot.guilds),
-                        "Server List": server_list[:1024] if server_list else "None"
-                    }
-                )
-            else:
-                logger.warning(f'Could not find log channel with ID: {LOG_CHANNEL_ID}')
-        except Exception as e:
-            logger.error(f'Error setting up log channel: {e}')
-
-    # Sync slash commands globally
     try:
-        logger.info("Syncing slash commands globally...")
-        synced = await bot.tree.sync()
-        logger.info(f"Successfully synced {len(synced)} global slash commands.")
+        global log_channel
+        
+        logger.info(f'Bot connected as {bot.user.name} (ID: {bot.user.id})')
+        logger.info(f'Connected to {len(bot.guilds)} server(s)')
+        logger.info('=' * 50)
+        logger.info('SERVERS YOUR BOT IS IN:')
+        logger.info('=' * 50)
+        for i, guild in enumerate(bot.guilds, 1):
+            logger.info(f'  {i}. {guild.name} (ID: {guild.id}) - {guild.member_count} members')
+        logger.info('=' * 50)
+        logger.info('Bot is ready to receive commands!')
+        
+        # Initialize activity log channel
+        if LOG_CHANNEL_ID:
+            try:
+                log_channel = bot.get_channel(int(LOG_CHANNEL_ID))
+                if log_channel:
+                    logger.info(f'Activity log channel set to: #{log_channel.name}')
+                    # Send startup log
+                    server_list = "\n".join([f"• {g.name} ({g.member_count} members)" for g in bot.guilds])
+                    await log_activity(
+                        "🟢 Bot Started",
+                        f"**{bot.user.name}** is now online!",
+                        color=0x00FF00,
+                        fields={
+                            "Servers": len(bot.guilds),
+                            "Server List": server_list[:1024] if server_list else "None"
+                        }
+                    )
+                else:
+                    logger.warning(f'Could not find log channel with ID: {LOG_CHANNEL_ID}')
+            except Exception as e:
+                logger.error(f'Error setting up log channel: {e}')
+
+        # Sync slash commands globally
+        try:
+            logger.info("Syncing slash commands globally...")
+            synced = await bot.tree.sync()
+            logger.info(f"Successfully synced {len(synced)} global slash commands.")
+        except Exception as e:
+            logger.error(f"Failed to sync slash commands: {e}")
+
+        # Start presence cycle
+        async def cycle_presence():
+            while True:
+                for activity, status in PRESENCE_STATUSES:
+                    await bot.change_presence(activity=activity, status=status)
+                    await asyncio.sleep(30)
+
+        bot.loop.create_task(cycle_presence())
+
+        # AutoMod Setup for Badge (runs on startup)
+        bot.loop.create_task(setup_all_guilds_automod())
+        
+        # Start account maturity check loop
+        if not check_account_maturity.is_running():
+            check_account_maturity.start()
+            logger.info("Account maturity check loop started.")
+
+        # Start chat revival loop
+        if not revive_chat.is_running():
+            revive_chat.start()
+            logger.info("Chat revival loop started.")
+
+        # Register persistent views
+        bot.add_view(SelfRoleView())
+        bot.add_view(RoleRequestView())
+        bot.add_view(VerifyButtonView())
+        bot.add_view(CaptchaEntryView())
+
     except Exception as e:
-        logger.error(f"Failed to sync slash commands: {e}")
-
-    # Start presence cycle
-    async def cycle_presence():
-        while True:
-            for activity, status in PRESENCE_STATUSES:
-                await bot.change_presence(activity=activity, status=status)
-                await asyncio.sleep(30)
-
-    bot.loop.create_task(cycle_presence())
-
-    # AutoMod Setup for Badge (runs on startup)
-    bot.loop.create_task(setup_all_guilds_automod())
-    
-    # Start account maturity check loop
-    if not check_account_maturity.is_running():
-        check_account_maturity.start()
-        logger.info("Account maturity check loop started.")
-
-    # Start chat revival loop
-    if not revive_chat.is_running():
-        revive_chat.start()
-        logger.info("Chat revival loop started.")
-
-    # Register persistent views
-    bot.add_view(SelfRoleView())
-    bot.add_view(RoleRequestView())
-    bot.add_view(VerifyButtonView())
-    bot.add_view(CaptchaEntryView())
-
-@on_ready.error
-async def on_ready_error(error):
-    logger.error(f"Error in on_ready: {error}")
+        logger.error(f"Fatal error in on_ready: {e}")
 
 def migrate_json_to_db():
     """One-time migration helper to move JSON data to SQLite."""
