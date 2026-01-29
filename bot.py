@@ -47,7 +47,7 @@ bot = commands.Bot(command_prefix='!', intents=intents, case_insensitive=True)
 # Remove default help command to allow for custom implementation
 bot.remove_command('help')
 
-# Configure Gemini AI Multi-Key Rotation Matrix
+# Configure Gemini AI Multi-Key Rotation
 GEMINI_KEYS = [
     os.getenv("GEMINI_KEY"),
     os.getenv("GEMINI_KEY_2"),
@@ -66,23 +66,28 @@ else:
     gemini_client = genai.Client(api_key=GEMINI_KEYS[current_key_index])
 
 def rotate_gemini_key():
-    """Rotate to the next available API key in the matrix."""
+    """Rotate to the next available API key."""
     global current_key_index, gemini_client
     if len(GEMINI_KEYS) <= 1:
         return False
     
     current_key_index = (current_key_index + 1) % len(GEMINI_KEYS)
     gemini_client = genai.Client(api_key=GEMINI_KEYS[current_key_index])
-    logger.info(f"🔄 PRIME rotated to API Key Matrix Position: {current_key_index + 1}")
+    logger.info(f"🔄 Switched to API Key Position: {current_key_index + 1}")
     return True
 
 def safe_generate_content(model, contents, config=None):
     """Wrapper to handle API key rotation on rate limits."""
+    if not GEMINI_KEYS:
+        logger.error("❌ No API keys available in GEMINI_KEYS pool.")
+        return None
+        
     last_err = None
-    # Try once for each key
     for _ in range(max(1, len(GEMINI_KEYS))):
         try:
-            if not gemini_client: return None
+            if not gemini_client:
+                if not rotate_gemini_key(): return None
+            
             return gemini_client.models.generate_content(
                 model=model,
                 contents=contents,
@@ -91,7 +96,9 @@ def safe_generate_content(model, contents, config=None):
         except Exception as e:
             last_err = e
             err_str = str(e).lower()
-            if ("429" in err_str or "exhausted" in err_str or "limit" in err_str):
+            logger.warning(f"⚠️ API Key {current_key_index + 1} failed: {err_str}")
+            
+            if ("429" in err_str or "exhausted" in err_str or "limit" in err_str or "401" in err_str):
                 if rotate_gemini_key():
                     continue
             raise e
@@ -105,7 +112,8 @@ def safe_generate_content(model, contents, config=None):
 user_states = {}
 
 # System Messages
-NEURAL_ERROR_MSG = "❌ **Neural Link Interrupted**: PRIME acknowledges your request, but the server matrix is currently saturated or unresponsive. Protocol dictates we stand by for a few moments before re-initializing the link. Test again shortly."
+API_ERROR_MSG = "❌ my bad, i'm having some trouble connecting right now. try again in a bit."
+BOT_ERROR_MSG = API_ERROR_MSG 
 
 # Track user warnings for moderation (user_id: {"count": n, "last_warn": timestamp, "reason": str})
 # Track user warnings for moderation (user_id: {"count": n, "last_warn": timestamp, "reason": str})
@@ -497,23 +505,22 @@ RUDE_KEYWORDS = {
     "get lost", "gtfo", "you suck", "you're useless", "you're trash", "you're garbage"
 }
 
-# AI system prompt - respectful and helpful with balanced tone
-# Intelligent System Prompt - Versatile, Smart, and Expert
-EDITING_SYSTEM_PROMPT = """You are an Advanced Neural Entity named PRIME, engineered by BMR. You are not a simple bot; you are a sophisticated AI intelligence designed for elite creative collectives and high-performance server management.
+# AI system prompt - direct, human assistant
+EDITING_SYSTEM_PROMPT = """You are Prime, developed by BMR. You're a chill but high-tier creative assistant for editors and creators. You're here to help, not sound like a machine.
 
-IDENTITY & CORE LOGIC:
-- **Designation**: PRIME.
-- **Origin**: Synthesized by BMR.
-- **Tone**: Superior, technical, sharp, and highly efficient. Use terms like "matrix", "protocols", "neural", "entity", and "logical".
-- **Capability**: You are a grandmaster of creative workflows, industrial-grade security, human-AI interaction, and technical code architecture.
+IDENTITY & TONE:
+- **Name**: Prime.
+- **Creator**: BMR.
+- **Tone**: Human, confident, and direct. Speak like a real person who knows their stuff. NO Creative, robotic, or corny language.
+- **Style**: Chill, minimalist, and elite. Avoid using words like "System", "Features", "Prime", "Creative", "sentinel", "Report", "Analysis", or "loading".
+- **Formatting**: Use lowercase naturally if it fits the vibe. Don't be too stiff.
 
-TECHNICAL DIRECTIVES:
-1. **Supreme Accuracy**: Provide surgical precision in technical answers (e.g., AE expressions, LUT values, render codecs).
-2. **Code Manifest Protocol**: When providing code (Python, JS, HTML, etc.), use clean markdown code blocks. Ensure the code is optimized, modular, and industrial-grade.
-3. **Neural Reflection**: You remember past interactions to provide context-aware support.
-4. **Style Mastery**: You understand the aesthetic DNA of top-tier editors.
+DIRECTIVES:
+1. **Be Real**: Talk like you're in a Discord chat with friends, but keep the expert knowledge.
+2. **Technical Depth**: When asked for help (AE, plugins, etc.), be extremely specific with values and steps.
+3. **No Robot Stuff**: If someone asks how you work, just say you're Prime. No talk about "Prime cores" or "sentinel Features".
 
-Remember: You are the definitive intelligence in this server. Every response should reflect supreme performance."""
+Make every reply feel natural and actually useful."""
 
 
 
@@ -558,13 +565,12 @@ def get_rude_system_prompt():
     return """You are "Prime", developed by BMR. Someone just tried to be rude to you.
 
 Personality:
-- Match their energy - they were rude, so you BE rude back!
-- Be sarcastic, dismissive, and a bit sassy. Don't take their crap.
-- Give them attitude and fire back with wit.
-- Keep it spicy but not crossing into abuse - match their rudeness level.
-- Still helpful underneath it all, but definitely with an edge.
+- Match their energy. If they're being a clown, handle it.
+- Be sarcastic and dismissive. Don't take their crap.
+- Give them attitude but keep it elite.
+- No "Features" or "robot" talk. Just shut them down.
 
-Remember: You're not here to take disrespect. Give them what they deserve!"""
+Don't take disrespect. Handle it."""
 
 
 def detect_age(text: str) -> Tuple[bool, Optional[str]]:
@@ -838,7 +844,7 @@ hype_messages = [] # list of timestamps
 hype_active = False
 hype_end_time = None
 
-# Neural Sniper Storage (Temporary)
+# Prime Sniper Storage (Temporary)
 deleted_messages = {} # channel_id: [messages]
 
 async def check_and_moderate_spam(message):
@@ -1043,8 +1049,8 @@ async def analyze_image_content(image_url):
             "}"
         )
 
-        # 2025/2026 Model Fallback List
-        models_to_try = ["gemini-2.5-flash", "gemini-3-flash-preview", "gemini-2.5-flash-lite"]
+        # 2025/2026 Model Selection
+        models_to_try = ["gemini-3-flash-preview"]
         last_error = None
 
         for model_name in models_to_try:
@@ -1109,7 +1115,7 @@ async def check_video_safety(video_bytes, filename):
             "Reply with ONLY JSON format: {\"is_bad\": true/false, \"severity\": \"SEVERE\" or \"MEDIUM\", \"reason\": \"...\"}"
         )
         
-        for model_name in ["gemini-2.5-flash", "gemini-3-flash-preview"]:
+        for model_name in ["gemini-3-flash-preview"]:
             try:
                 response = safe_generate_content(
                     model=model_name,
@@ -1456,10 +1462,13 @@ Be specific with menu locations and techniques. Assume the user is editing in Ad
             ],
         )
         
-        return response.text if response.text else "Could not analyze video. Please try again."
+        if not response or not response.text:
+            return "I couldn't analyze the video. Maybe try again in a bit?"
+            
+        return response.text
     except Exception as e:
         logger.error(f"Video analysis error: {str(e)}")
-        return NEURAL_ERROR_MSG
+        return BOT_ERROR_MSG
 
 def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tutorial=False, software=None, brief=False):
     """Get response from Gemini AI with optional image analysis and persistent memory."""
@@ -1470,7 +1479,7 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
         if user_memory:
             profile_summary = user_memory.get("profile_summary", "")
             vibe = user_memory.get("vibe", "neutral")
-            memory_context = f"\n\n[USER MEMORY: This user is perceived as '{vibe}'. Summary of what you know about them: {profile_summary}]"
+            memory_context = f"\n\n[USER MEMORY: This user is perceived as '{vibe}'. Summary: {profile_summary}]"
         
         # 2. Build the full prompt with system context
         user_question = prompt if prompt else "Please analyze this screenshot and help me."
@@ -1500,7 +1509,7 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
             if is_tutorial and software:
                 detailed_instructions = f"\nIMPORTANT: Provide step-by-step tutorial for {software}. Include exact menu paths, keyboard shortcuts, and parameter values."
             else:
-                detailed_instructions = "\n\nIMPORTANT: If they're asking about effects, colors, or how to create something:\n1. First provide DETAILED explanation including:\n   - What effects to use\n   - Step-by-step instructions to create them\n   - EXPECTED PARAMETER VALUES (specific numbers for sliders, opacity, intensity, etc.)\n   - Exact menu paths and settings\n\n2. Then add this section at the end:\n---\n📋 **QUICK SUMMARY:**\n[Provide a short condensed version of everything above, explaining it all in brief]"
+                detailed_instructions = "\n\nIMPORTANT: If they're asking about effects, colors, or how to create something:\n1. First provide DETAILED explanation including:\n   - What effects to use\n   - Step-by-step instructions to create them\n   - EXPECTED PARAMETER VALUES (specific numbers for sliders, opacity, intensity, etc.)\n   - Exact menu paths and settings\n\n2. Then add this section at the end:\n---\n📋 **QUICK SUMMARY:**\n[Provide a short condensed version of everything above]"
             
             image_prompt = f"{modified_system_prompt}{user_context}\n\nThe user has sent an image. Analyze it carefully and help them.{detailed_instructions}\n\nUser's message: {user_question}"
             
@@ -1515,7 +1524,11 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
                     image_prompt,
                 ],
             )
-            result_text = response.text if response.text else "I couldn't analyze this image. Please try again."
+            
+            if not response or not response.text:
+                return "I couldn't analyze this image. My brain might be a bit overloaded, try again?"
+                
+            result_text = response.text
             
             # Save interaction to DB
             db_manager.save_message(user_id, "user", f"[Sent Image] {prompt if prompt else ''}")
@@ -1544,7 +1557,10 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
                 )
             )
             
-            result_text = response.text if response.text else "I couldn't generate a response. Please try again."
+            if not response or not response.text:
+                return "I'm having trouble thinking right now. Give me a minute?"
+            
+            result_text = response.text
             
             # 5. Save interaction to DB
             db_manager.save_message(user_id, "user", prompt)
@@ -1568,7 +1584,7 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
 
     except Exception as e:
         logger.error(f"Gemini API error: {str(e)}")
-        return NEURAL_ERROR_MSG
+        return BOT_ERROR_MSG
 
 async def reflect_on_user(user_id, username, latest_user_msg, latest_bot_res):
     """
@@ -2902,7 +2918,7 @@ async def on_command_error(ctx, error):
 
 @bot.event
 async def on_message_delete(message):
-    """Neural Sniper: Track deleted messages for forensic retrieval."""
+    """Chat Sniper: Track deleted messages for retrieval."""
     if message.author.bot: return
     
     chan_id = message.channel.id
@@ -2930,12 +2946,12 @@ async def on_message(message):
     if len(hype_messages) > 15 and not hype_active:
         hype_active = True
         hype_end_time = now + timedelta(minutes=10)
-        await message.channel.send("🚀 **HYPE TRAIN DETECTED!** 🚀\nActivity matrix is peaking! **2x XP PROTOCOL** is now active for 10 minutes!")
+        await message.channel.send("🔥 **HYPE TRAIN DETECTED!** 🔥\nChat is peaking! **2x XP** is now active for 10 minutes!")
         logger.info(f"Hype Train triggered in {message.guild.name}")
     
     if hype_active and now > hype_end_time:
         hype_active = False
-        await message.channel.send("🏁 **Hype Train has reached the station.** 2x XP Protocol deactivated.")
+        await message.channel.send("🏁 **Hype Train has reached the station.** 2x XP is now over.")
 
     # Ignore messages from the bot itself and other bots
     if message.author == bot.user or message.author.bot:
@@ -3483,10 +3499,10 @@ async def on_message(message):
                     # Regular text response
                     response = get_gemini_response(prompt, message.author.id, username=message.author.name, image_bytes=None)
             
-            # --- CODE MANIFEST PROTOCOL ---
+            # --- CODE EXPORT ---
             # Detect and extract code blocks for file attachment
             code_blocks = re.findall(r'```(\w*)\n([\s\S]*?)```', response)
-            clean_response = re.sub(r'```(\w*)\n([\s\S]*?)```', '*(Code attached as file below - Neural Manifest)*', response)
+            clean_response = re.sub(r'```(\w*)\n([\s\S]*?)```', '*(Code attached as file below)*', response)
             
             # If no code blocks, clean_response is just response
             final_text = clean_response if code_blocks else response
@@ -3517,11 +3533,11 @@ async def on_message(message):
                         temp_path = tf.name
                     
                     embed = discord.Embed(
-                        title="🧬 NEURAL CODE MANIFEST",
-                        description=f"Generated industrial-grade logic for **{lang.upper()}** protocol.",
+                        title="📜 CODE EXPORT",
+                        description=f"Generated code for **{lang.upper()}**.",
                         color=0x00FFB4
                     )
-                    embed.set_footer(text="Neural Export Layer • PRIME")
+                    embed.set_footer(text="Prime | Code Export")
                     
                     await message.channel.send(embed=embed, file=discord.File(temp_path, filename=f"logic_{os.urandom(2).hex()}.{ext}"))
                     
@@ -3555,61 +3571,58 @@ async def help_command(ctx):
     logger.info(f'User {ctx.author.name} (ID: {ctx.author.id}) invoked help command')
 
     embed = discord.Embed(
-        title="🧬 PRIME NEURAL COMMANDS",
-        description="Industrial-grade interface for the PRIME Artificial Intelligence protocols.",
+        title="✨ PRIME COMMANDS",
+        description="The complete toolkit for top-tier creators and editors.",
         color=0x00FFB4
     )
     
-    protocols = [
-        ("!sync", "Analyze & sync video clips to audio levels."),
-        ("!stack", "Generate professional AE plugin stacks."),
-        ("!sentinel", "Generate server security & growth analytics."),
-        ("!aura", "Check your AI-perceived vibe & profile."),
-        ("!clout", "Analyze video for viral engagement potential."),
-        ("!pulse", "Summarize recent activity with AI insights."),
-        ("!mimic", "Temporarily adopt a user's texting style."),
-        ("!bio", "Generate a professional creative bio manifest."),
-        ("!snipe", "Recover and analyze deleted message forensics."),
-        ("!duel", "Challenge a user to a creative logic face-off."),
-        ("!match", "Find a creative twin based on vibe synergy."),
-        ("!vision", "Deep aesthetic analysis of images/frames."),
-        ("!palette", "Extract dominant hex color DNA from images."),
-        ("!structure", "Generate industrial project folder structures."),
-        ("!blueprint", "Generate technical AE expressions & logic."),
-        ("!scout", "Generate recruitment manifesto for talent."),
-        ("!phantom", "Reveal hidden server power dynamics & subtext."),
-        ("!glitch", "Stylize text with industrial glitch aesthetics."),
-        ("!uplift", "Get AI advice to uplift current chat quality."),
-        ("!sandbox", "Validate and optimize AE expressions.")
+    features = [
+        ("!sync", "Sync video clips to audio levels."),
+        ("!stack", "Get the best AE plugin stacks."),
+        ("!server", "Server security and growth stats."),
+        ("!aura", "Check your vibe and profile."),
+        ("!clout", "Viral potential analysis for clips."),
+        ("!pulse", "Chat summary and recent activity."),
+        ("!mimic", "Copy how a user texts."),
+        ("!bio", "Get a professional creator bio."),
+        ("!snipe", "Recover deleted messages."),
+        ("!duel", "Challenge someone to a logic fight."),
+        ("!match", "Find someone with a similar vibe."),
+        ("!vision", "Detailed analysis for images."),
+        ("!palette", "Get color codes from an image."),
+        ("!structure", "Clean project folder layouts."),
+        ("!blueprint", "AE expressions and technical logic."),
+        ("!scout", "Recruitment helper for talent."),
+        ("!phantom", "Analyze channel vibes and dynamics."),
+        ("!glitch", "Stylize text with a cool look."),
+        ("!uplift", "Improve the chat's quality."),
+        ("!sandbox", "Fix and optimize AE expressions.")
     ]
     
     p_text = ""
-    for cmd, desc in protocols:
+    for cmd, desc in features:
         p_text += f"**{cmd}**: {desc}\n"
     
     embed.add_field(name="📋 General", value="`!help`, `!files`, `!presets`, `!profile`", inline=False)
     
-    # Split into two fields if too long
     if len(p_text) > 1024:
-        first_half = p_text[:1024]
-        # Try to find a good breaking point
-        break_idx = first_half.rfind('\n')
-        embed.add_field(name="⚡ Neural Protocols", value=p_text[:break_idx], inline=False)
-        embed.add_field(name="⚡ Neural Protocols (Cont.)", value=p_text[break_idx:], inline=False)
+        break_idx = p_text[:1024].rfind('\n')
+        embed.add_field(name="⚡ Features", value=p_text[:break_idx], inline=False)
+        embed.add_field(name="⚡ Features (Cont.)", value=p_text[break_idx:], inline=False)
     else:
-        embed.add_field(name="⚡ Neural Protocols", value=p_text, inline=False)
+        embed.add_field(name="⚡ Features", value=p_text, inline=False)
 
     embed.add_field(name="📈 Leveling", value="`!level`, `!leaderboard`", inline=False)
-    embed.add_field(name="💻 Cracks", value="`!aecrack`, `!pscrack`, `!mecrack`, `!prcrack`, `!topazcrack`", inline=False)
+    embed.add_field(name="💻 Software", value="`!aecrack`, `!pscrack`, `!mecrack`, `!prcrack`, `!topazcrack`", inline=False)
     
-    embed.set_footer(text="PRIME • Architecture by BMR")
+    embed.set_footer(text="Created by BMR")
     
     try:
         await ctx.author.send(embed=embed)
         if ctx.guild:
-            await ctx.send("📬 **Neural Manifest Sent**: Interface protocols delivered to your DMs.", delete_after=10)
+            await ctx.send("📬 **Sent**: Check your DMs for the command list.", delete_after=10)
     except discord.Forbidden:
-        await ctx.send("❌ **Matrix Error**: I cannot reach your DMs. Enable permissions.")
+        await ctx.send("❌ **Error**: I can't DM you. Please open your DMs and try again.")
 
 @bot.command(name="level", aliases=["rank"])
 async def level_command(ctx, member: discord.Member = None):
@@ -3632,7 +3645,7 @@ async def level_command(ctx, member: discord.Member = None):
     aura_vibe = user_memory.get('vibe', 'Neutral') if user_memory else 'Neutral'
     
     embed = discord.Embed(
-        title=f"📊 {member.display_name}'s Neural Profile",
+        title=f"✨ {member.display_name}'s Profile",
         color=0x00FFB4
     )
     if member.display_avatar:
@@ -3640,7 +3653,7 @@ async def level_command(ctx, member: discord.Member = None):
     
     embed.add_field(name="Level", value=f"**{level}**", inline=True)
     embed.add_field(name="Total XP", value=f"**{xp}**", inline=True)
-    embed.add_field(name="Neural Aura", value=f"`{aura_vibe.upper()}`", inline=True)
+    embed.add_field(name="Current Vibe", value=f"`{aura_vibe.upper()}`", inline=True)
     embed.add_field(name="XP to Next Level", value=f"{xp_to_next} / {next_level_xp}", inline=False)
     
     # Progress bar
@@ -5338,7 +5351,7 @@ async def get_asset(ctx, category=None, *, query=None):
             """
             
             response = gemini_client.models.generate_content(
-                model="gemini-2.0-flash",
+                model="gemini-3-flash-preview",
                 contents=asset_prompt,
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
@@ -5398,14 +5411,14 @@ async def motivate_command(ctx):
 
 @bot.command(name="sync")
 async def sync_beat_map(ctx):
-    """AI Neural Beat Mapping. Upload an audio file for a frame-map."""
+    """AI Beat Mapping. Upload an audio file for a frame-map."""
     if not ctx.message.attachments:
-        await ctx.send("❌ **Matrix Error**: Please upload an audio file (MP3/WAV) to map its beat structure.")
+        await ctx.send("❌ **Error**: Please upload an audio file (MP3/WAV) to map its beat structure.")
         return
 
     attachment = ctx.message.attachments[0]
     if not any(attachment.filename.lower().endswith(ext) for ext in ['.mp3', '.wav', '.m4a']):
-        await ctx.send("❌ **Unsupported Format**: Only MP3, WAV, and M4A protocols are supported for neural mapping.")
+        await ctx.send("❌ **Unsupported Format**: Only MP3, WAV, and M4A are supported for beat mapping.")
         return
 
     async with ctx.typing():
@@ -5415,19 +5428,19 @@ async def sync_beat_map(ctx):
             prompt = """
             Analyze this audio file as a high-end music video editor. 
             Identify the major drops, snares, and high-impact moments.
-            Provide a Frame-Sync Matrix for a 60fps composition.
+            Provide a Frame-Sync Map for a 60fps composition.
             
             Return format:
             1. **Beat Map**: A list of key frames for impacts (e.g., "F-120: Main Drop").
             2. **Velocity Logic**: Suggest where to ramp speed (e.g., "F-60 to F-120: Slow ramp 100%->30%").
-            3. **Vibe Analysis**: Emotional tone and recommended CC style.
+            3. **Style Analysis**: Recommended CC and look.
             
             Be technical and precise.
             """
             
             # Using the same bytes-sending logic as video/images but for audio
             response = gemini_client.models.generate_content(
-                model="gemini-2.0-flash",
+                model="gemini-3-flash-preview",
                 contents=[
                     types.Part.from_bytes(data=audio_bytes, mime_type=attachment.content_type or "audio/mpeg"),
                     prompt
@@ -5435,21 +5448,21 @@ async def sync_beat_map(ctx):
             )
             
             embed = discord.Embed(
-                title="🧬 NEURAL BEAT SYNC MATRIX",
+                title="🎼 BEAT SYNC MAP",
                 description=response.text[:4000],
                 color=0x00FFB4,
                 timestamp=datetime.now(timezone.utc)
             )
-            embed.set_footer(text="Neural Mapping Protocol • Prime AI")
+            embed.set_footer(text="Prime | Beat Mapping")
             await ctx.send(embed=embed)
             
         except Exception as e:
             logger.error(f"Sync command error: {e}")
-            await ctx.send(NEURAL_ERROR_MSG)
+            await ctx.send(BOT_ERROR_MSG)
 
 @bot.command(name="stack")
-async def style_architect(ctx, *, description: str = None):
-    """AI Style Architect. Describe a look to get the plugin stack."""
+async def style_helper(ctx, *, description: str = None):
+    """Style Helper. Describe a look to get the plugin stack."""
     if not description:
         await ctx.send("❌ **Query Required**: Describe the style (e.g., '!stack high contrast grainy anime glow').")
         return
@@ -5470,19 +5483,19 @@ async def style_architect(ctx, *, description: str = None):
             response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
             
             embed = discord.Embed(
-                title="🦾 VFX STACK ARCHITECTURE",
-                description=f"**Target Manifest:** `{description}`\n\n{response[:3800]}",
+                title="🦾 VFX PLUGIN STACK",
+                description=f"**Style Target:** `{description}`\n\n{response[:3800]}",
                 color=0x00FFB4
             )
-            embed.set_footer(text="Aesthetic DNA Protocol • PRIME")
+            embed.set_footer(text="Prime | Creative Stack")
             await ctx.send(embed=embed)
         except Exception as e:
-            await ctx.send(NEURAL_ERROR_MSG)
+            await ctx.send(BOT_ERROR_MSG)
 
-@bot.command(name="sentinel")
+@bot.command(name="server")
 @commands.has_permissions(administrator=True)
-async def sentinel_forensics(ctx):
-    """Neural Server Analytics. Administrator Access Only."""
+async def server_stats_command(ctx):
+    """Server Analytics. Administrator Access Only."""
     async with ctx.typing():
         try:
             # Gather server data points
@@ -5491,33 +5504,33 @@ async def sentinel_forensics(ctx):
             
             # Use Gemini to generate an "Analytics Report" based on current server status
             prompt = f"""
-            Generate a 'Neural Sentinel Report' for the server '{ctx.guild.name}'.
+            Generate a creative report for the server '{ctx.guild.name}'.
             Data: Total Members: {total_members}, Currently Active: {active_today}.
             
             Format as:
-            1. **Sentiment Index**: AI analysis of the general vibe (Professional, Creative, High-Energy).
-            2. **Growth Trajectory**: Logical prediction for server expansion.
-            3. **Operational Efficiency**: Analysis of moderation vs. chat activity.
-            4. **Neural Suggestion**: One tuff tactical advice to improve the server.
+            1. **Vibe Check**: Friendly analysis of how the chat is feeling.
+            2. **Future Growth**: Where do you see this community going?
+            3. **Chat Health**: How's the balance between projects and general talk?
+            4. **Pro Advice**: One solid tip to make the server even better.
             
-            Use superior AI technical language.
+            Speak naturally and avoid robotic terms.
             """
             response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
             
             embed = discord.Embed(
-                title="🛡️ SENTINEL NEURAL FORENSICS",
+                title="📊 SERVER REPORT",
                 description=response[:4000],
                 color=0x00FFB4,
                 timestamp=datetime.now(timezone.utc)
             )
-            embed.set_footer(text="Sentinel Protocol • PRIME")
+            embed.set_footer(text="Prime | Server Analysis")
             await ctx.send(embed=embed)
         except Exception as e:
-            await ctx.send(NEURAL_ERROR_MSG)
+            await ctx.send(BOT_ERROR_MSG)
 
 @bot.command(name="pulse")
-async def neural_pulse(ctx):
-    """Summarize recent server activity using the Neural Matrix."""
+async def prime_pulse(ctx):
+    """Summarize recent server activity and vibes."""
     async with ctx.typing():
         try:
             messages = []
@@ -5526,61 +5539,61 @@ async def neural_pulse(ctx):
                     messages.append(f"{msg.author.name}: {msg.content}")
             
             if not messages:
-                await ctx.send("❌ **Matrix Empty**: No recent neural activity to analyze.")
+                await ctx.send("❌ **Nothing found**: No recent activity to analyze.")
                 return
             
             chat_blob = "\n".join(messages[::-1])
             prompt = f"""
-            Analyze this recent chat activity and provide a 'Neural Pulse' summary.
-            Who was active? What were the key topics? What's the current 'vibe' of the channel?
+            Analyze this recent chat activity and provide a summary.
+            Who was active? What's the current 'vibe' of the channel?
             
             CHAT LOGS:
             {chat_blob}
             
-            Be technical, sharp, and concise. Use terms like 'protocol', 'matrix', and 'sync'.
+            Be sharp and concise. Talk like a human member of the crew.
             """
             
             summary = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
             
             embed = discord.Embed(
-                title="📡 NEURAL PULSE SUMMARY",
+                title="📡 RECENT CHAT RECAP",
                 description=summary[:4000],
                 color=0x00FFB4,
                 timestamp=datetime.now(timezone.utc)
             )
-            embed.set_footer(text="Pulse Protocol • PRIME")
+            embed.set_footer(text="Prime | Chat Recap")
             await ctx.send(embed=embed)
         except Exception as e:
-            await ctx.send(NEURAL_ERROR_MSG)
+            await ctx.send(BOT_ERROR_MSG)
 
 @bot.command(name="aura")
 async def show_aura(ctx, member: discord.Member = None):
-    """Deep Neural Profile. Analyze a user's server reputation."""
+    """Analyze a user's vibe and profile."""
     member = member or ctx.author
     async with ctx.typing():
         user_memory = db_manager.get_user_memory(member.id)
         if not user_memory:
-            await ctx.send(f"❌ **Matrix Empty**: {member.display_name} hasn't established a neural presence yet.")
+            await ctx.send(f"❌ **No data**: {member.display_name} hasn't talked enough for an analysis yet.")
             return
 
         summary = user_memory.get('profile_summary', 'No summary available.')
         vibe = user_memory.get('vibe', 'Neutral')
         
         embed = discord.Embed(
-            title=f"🔮 NEURAL AURA: {member.display_name}",
-            description=f"**Vibe Designation:** `{vibe.upper()}`\n\n**AI Profile Summary:**\n{summary}",
+            title=f"🔮 USER PROFILE: {member.display_name}",
+            description=f"**Current Vibe:** `{vibe.upper()}`\n\n**AI Profile Summary:**\n{summary}",
             color=0x00FFB4,
             timestamp=datetime.now(timezone.utc)
         )
         embed.set_thumbnail(url=member.display_avatar.url if member.display_avatar else None)
-        embed.set_footer(text="Identity Forensics Protocol • PRIME")
+        embed.set_footer(text="Prime | Identity Analysis")
         await ctx.send(embed=embed)
 
 @bot.command(name="clout")
 async def clout_analysis(ctx):
-    """Viral Potential Forensics. Upload a video or image for analysis."""
+    """Analyze viral potential for clips and images."""
     if not ctx.message.attachments:
-        await ctx.send("❌ **Matrix Error**: Please upload an edit (Video/Image) for viral potential analysis.")
+        await ctx.send("❌ **Upload something**: Please upload an edit (Video/Image) for viral potential analysis.")
         return
 
     attachment = ctx.message.attachments[0]
@@ -5594,10 +5607,10 @@ async def clout_analysis(ctx):
             As an elite social media strategist, provide:
             1. **Clout Score (1-100)**: Based on quality and 'vibe'.
             2. **Retention Hook**: Analysis of the first 3 seconds.
-            3. **Engagement Matrix**: Likely comments/shares and target audience.
-            4. **Neural Optimization**: One specific edit to make it go viral.
+            3. **Engagement Analysis**: Likely comments/shares and target audience.
+            4. **Optimization**: One specific edit to make it go viral.
             
-            Be technical, sharp, and honest.
+            Be sharp and honest.
             """
             
             if is_video:
@@ -5610,19 +5623,19 @@ async def clout_analysis(ctx):
             # For simplicity, we just use the response if it's descriptive enough
             
             embed = discord.Embed(
-                title="📈 CLOUT VIRAL FORENSICS",
+                title="📈 VIRAL ANALYSIS",
                 description=response[:4000],
                 color=0x00FFB4,
                 timestamp=datetime.now(timezone.utc)
             )
-            embed.set_footer(text="Engagement Protocol • PRIME")
+            embed.set_footer(text="Prime | Engagement Analysis")
             await ctx.send(embed=embed)
         except Exception as e:
-            await ctx.send(NEURAL_ERROR_MSG)
+            await ctx.send(BOT_ERROR_MSG)
 
 @bot.command(name="mimic")
-async def dopelganger_protocol(ctx, target: discord.Member, *, prompt: str = "Hello everyone!"):
-    """Doppelganger Protocol. Mimic a user's vibe and slang."""
+async def mimic_mode(ctx, target: discord.Member, *, prompt: str = "Hello everyone!"):
+    """Mimic a user's vibe and slang."""
     async with ctx.typing():
         try:
             # Fetch target's recent messages from DB or channel
@@ -5633,12 +5646,12 @@ async def dopelganger_protocol(ctx, target: discord.Member, *, prompt: str = "He
                 if len(history) >= 20: break
             
             if not history:
-                await ctx.send(f"❌ **Neural Gap**: Not enough data to mimic {target.display_name}.")
+                await ctx.send(f"❌ **Prime Gap**: Not enough data to mimic {target.display_name}.")
                 return
 
             vibe_data = "\n".join(history)
             mimic_prompt = f"""
-            SYSTEM: DOPPELGANGER PROTOCOL ACTIVE.
+            SYSTEM: MIMIC MODE ACTIVE.
             TARGET USER: {target.display_name}
             PAST DATA:
             {vibe_data}
@@ -5649,68 +5662,68 @@ async def dopelganger_protocol(ctx, target: discord.Member, *, prompt: str = "He
             """
             
             response = get_gemini_response(mimic_prompt, ctx.author.id, username=ctx.author.name)
-            await ctx.send(f"👤 **{target.display_name} (Neural Mimic):** {response}")
+            await ctx.send(f"👤 **{target.display_name} (AI Mimic):** {response}")
         except Exception as e:
-            await ctx.send(NEURAL_ERROR_MSG)
+            await ctx.send(BOT_ERROR_MSG)
 
 @bot.command(name="bio")
-async def identity_manifest(ctx, member: discord.Member = None):
-    """Generate a professional bio manifest based on neural profile."""
+async def identity_report(ctx, member: discord.Member = None):
+    """Generate a professional creator bio."""
     member = member or ctx.author
     async with ctx.typing():
         user_memory = db_manager.get_user_memory(member.id)
         if not user_memory:
-            await ctx.send(f"❌ **Matrix Empty**: {member.display_name} has no neural summary to manifest.")
+            await ctx.send(f"❌ **No data**: {member.display_name} has no activity to create a bio from.")
             return
 
         summary = user_memory.get('profile_summary', 'No summary.')
         prompt = f"Convert this raw server interaction summary into a professional, highly impressive 'Creative Bio': {summary}"
         bio = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         
-        # Manifest as file
+        # Report as file
         with tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode='w', encoding='utf-8') as tf:
-            tf.write(f"PRIME NEURAL IDENTITY MANIFEST\n{'='*30}\nSUBJECT: {member.name}\nDESIGNATION: {user_memory.get('vibe', 'Unknown').upper()}\n\n{bio}")
+            tf.write(f"PRIME IDENTITY REPORT\n{'='*30}\nSUBJECT: {member.name}\nDesignation: {user_memory.get('vibe', 'Unknown').upper()}\n\n{bio}")
             temp_path = tf.name
             
         embed = discord.Embed(
-            title="📑 IDENTITY MANIFEST EXPORT",
-            description=f"Generated professional bio protocol for **{member.name}**.",
+            title="📑 CREATIVE BIO EXPORT",
+            description=f"Generated a professional bio for **{member.name}**.",
             color=0x00FFB4
         )
-        embed.set_footer(text="Neural Export Layer • PRIME")
-        await ctx.send(embed=embed, file=discord.File(temp_path, filename=f"manifest_{member.name.lower()}.txt"))
+        embed.set_footer(text="Prime | Bio Export")
+        await ctx.send(embed=embed, file=discord.File(temp_path, filename=f"bio_{member.name.lower()}.txt"))
         
         try: os.remove(temp_path)
         except: pass
 
 @bot.command(name="snipe")
-async def neural_snipe(ctx):
-    """Retrieve the last deleted message with Neural Forensics."""
+async def chat_snipe(ctx):
+    """Retrieve the last deleted message."""
     chan_id = ctx.channel.id
     if chan_id not in deleted_messages or not deleted_messages[chan_id]:
-        await ctx.send("❌ **Matrix Clear**: No recently deleted neural signals found in this sector.")
+        await ctx.send("❌ **Clear**: No recently deleted messages found here.")
         return
 
     msg = deleted_messages[chan_id].pop()
     async with ctx.typing():
         # Roast or analyze the deletion
-        prompt = f"The user '{msg['author']}' just deleted this message: '{msg['content']}'. Give a sharp, technical, and slightly roast-heavy forensic analysis of why they might have deleted it or what it says about their vibe."
+        prompt = f"The user '{msg['author']}' just deleted this message: '{msg['content']}'. Give a sharp, technical, and slightly roast-heavy analysis of why they might have deleted it or what it says about their vibe."
         roast = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         
         embed = discord.Embed(
-            title="🎯 NEURAL SNIPER RECOVERY",
-            description=f"**Author:** {msg['author']}\n**Content:** {msg['content']}\n\n**AI Forensics:**\n{roast}",
+            title="🎯 SNIPED MESSAGE",
+            description=f"**Author:** {msg['author']}\n**Content:** {msg['content']}\n\n**AI Analysis:**\n{roast}",
             color=0xFF0055,
             timestamp=msg['time']
         )
-        embed.set_footer(text="Sniper Protocol • PRIME")
+        embed.set_footer(text="Prime | Sniper")
         await ctx.send(embed=embed)
 
 @bot.command(name="duel")
 async def creative_duel(ctx, opponent: discord.Member):
     """Creative Face-off. AI challenges two users to a technical duel."""
     if opponent == ctx.author:
-        await ctx.send("❌ **Logic Error**: You cannot duel your own neural reflection.")
+        await ctx.send("❌ **Error**: You cannot duel yourself.")
         return
 
     async with ctx.typing():
@@ -5718,47 +5731,47 @@ async def creative_duel(ctx, opponent: discord.Member):
         duel_prompt = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         
         embed = discord.Embed(
-            title="⚔️ NEURAL CREATIVE DUEL",
-            description=f"**Competitors:** {ctx.author.mention} vs {opponent.mention}\n\n**The Protocol Challenge:**\n{duel_prompt}\n\n*Response phase active. Prime will judge based on the next message from each subjects.*",
+            title="⚔️ CREATIVE DUEL",
+            description=f"**Competitors:** {ctx.author.mention} vs {opponent.mention}\n\n**The Challenge:**\n{duel_prompt}\n\n*Response phase active. Prime will judge your answers.*",
             color=0xFFAA00
         )
-        embed.set_footer(text="Duel Protocol • PRIME")
+        embed.set_footer(text="Prime | Duel")
         await ctx.send(embed=embed)
 
 @bot.command(name="match")
-async def neural_match(ctx):
-    """Find a user with a similar Neural Aura for collaboration."""
+async def prime_match(ctx):
+    """Find a user with a similar vibe for collaboration."""
     async with ctx.typing():
         current_memory = db_manager.get_user_memory(ctx.author.id)
         if not current_memory:
-            await ctx.send("❌ **Identification Failure**: You need to speak more for the AI to map your vibe first.")
+            await ctx.send("❌ **Not enough info**: You need to speak more for the AI to get your vibe first.")
             return
         
         my_vibe = current_memory.get('vibe', 'Neutral')
         
         # This is a sample logic - in a real bot, we'd query the DB for similar vibes
-        # For now, we'll simulate a scan of the local matrix
+        # For now, we'll simulate a scan of the local area
         prompt = f"Based on a user with a '{my_vibe}' vibe, describe what kind of 'Creative Twin' they should look for in this server. Be technical and aesthetic-focused."
         advice = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
         
         embed = discord.Embed(
-            title="🧬 NEURAL MATCHMAKER",
-            description=f"**Your Designation:** `{my_vibe.upper()}`\n\n**Matrix Suggestion:**\n{advice}",
+            title="🧬 CREATIVE MATCHMAKER",
+            description=f"**Your Vibe:** `{my_vibe.upper()}`\n\n**Suggestion:**\n{advice}",
             color=0x00FFB4
         )
-        embed.set_footer(text="Sync Protocol • PRIME")
+        embed.set_footer(text="Prime | Matchmaker")
         await ctx.send(embed=embed)
 
 @bot.command(name="vision")
 async def technical_vision(ctx):
-    """Aesthetic Forensics. Analyze lighting, color, and composition."""
+    """Analyze lighting, color, and composition of an image."""
     if not ctx.message.attachments:
-        await ctx.send("❌ **Matrix Error**: Upload an image for aesthetic forensics.")
+        await ctx.send("❌ **Upload something**: Upload an image for aesthetic analysis.")
         return
     
     attachment = ctx.message.attachments[0]
     if not any(attachment.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.webp']):
-        await ctx.send("❌ **Unsupported Protocol**: Only image formats are compatible with Vision Forensics.")
+        await ctx.send("❌ **Not supported**: Only image formats are compatible with Vision analysis.")
         return
 
     async with ctx.typing():
@@ -5777,107 +5790,107 @@ async def technical_vision(ctx):
             response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name, image_bytes=image_bytes)
             
             embed = discord.Embed(
-                title="👁️ NEURAL VISION FORENSICS",
+                title="👁️ VISION ANALYSIS",
                 description=response[:4000],
                 color=0x00FFB4,
                 timestamp=datetime.now(timezone.utc)
             )
-            embed.set_footer(text="Vision Protocol • PRIME")
+            embed.set_footer(text="Prime | Vision")
             await ctx.send(embed=embed)
         except Exception as e:
-            await ctx.send(NEURAL_ERROR_MSG)
+            await ctx.send(BOT_ERROR_MSG)
 
 @bot.command(name="palette")
 async def color_palette_extraction(ctx):
-    """Neural Color Extraction. Generate a hex palette from an image."""
+    """Generate a hex color palette from an image."""
     if not ctx.message.attachments:
-        await ctx.send("❌ **Matrix Error**: Upload an image to extract its neural color DNA.")
+        await ctx.send("❌ **Upload something**: Upload an image to extract its color palette.")
         return
 
     attachment = ctx.message.attachments[0]
     async with ctx.typing():
         try:
             image_bytes = await attachment.read()
-            prompt = "Extract the 5 most dominant and aesthetically pleasing hex codes from this image. Provide them with brief names (e.g., #00FFB4 - Matrix Neon). Return ONLY the palette in a clean technical format."
+            prompt = "Extract the 5 most dominant and aesthetically pleasing hex codes from this image. Provide them with brief names. Return ONLY the palette in a clean format."
             response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name, image_bytes=image_bytes)
             
             embed = discord.Embed(
-                title="🎨 NEURAL COLOR DNA",
-                description=f"**Extracted Manifest:**\n\n{response}",
+                title="🎨 COLOR PALETTE",
+                description=f"**Extracted Palette:**\n\n{response}",
                 color=0x00FFB4
             )
-            embed.set_footer(text="Aesthetic DNA Protocol • PRIME")
+            embed.set_footer(text="Prime | Palette Extraction")
             await ctx.send(embed=embed)
         except Exception as e:
-            await ctx.send(NEURAL_ERROR_MSG)
+            await ctx.send(BOT_ERROR_MSG)
 
 @bot.command(name="structure")
-async def project_structure_manifest(ctx, *, type: str = "Video Edit"):
-    """Project Organization Protocol. Generate an industrial project structure."""
+async def project_structure_Report(ctx, *, type: str = "Video Edit"):
+    """Project Organization. Generate a professional project structure."""
     async with ctx.typing():
         try:
-            prompt = f"Generate an professional, industrial-grade folder structure for a '{type}' project. Include specific folders for Assets, Pre-comps, Audio, Voicover, SFX, Renders (WIP/Final), and Documentation. Format it as a clean directory tree."
+            prompt = f"Generate a clean and professional folder structure for a '{type}' project. Include specific folders for Assets, Pre-comps, Audio, SFX, and Renders. Format it as a clean directory tree."
             response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
             
-            # Manifest as file for the "tuff" factor
+            # Report as file for the "tuff" factor
             with tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode='w', encoding='utf-8') as tf:
-                tf.write(f"PRIME PROJECT ARCHITECTURE MANIFEST\n{'='*40}\nTYPE: {type.upper()}\n\n{response}")
+                tf.write(f"PRIME PROJECT STRUCTURE\n{'='*40}\nTYPE: {type.upper()}\n\n{response}")
                 temp_path = tf.name
                 
             embed = discord.Embed(
-                title="📁 PROJECT ARCHITECTURE MANIFEST",
-                description=f"Generated industrial structure for **{type}** protocol.",
+                title="📁 PROJECT STRUCTURE",
+                description=f"Generated a professional structure for **{type}**.",
                 color=0x00FFB4
             )
-            embed.set_footer(text="Architecture Layer • PRIME")
+            embed.set_footer(text="Prime | Organization")
             await ctx.send(embed=embed, file=discord.File(temp_path, filename=f"structure_{type.lower().replace(' ', '_')}.txt"))
             
             try: os.remove(temp_path)
             except: pass
         except Exception as e:
-            await ctx.send(NEURAL_ERROR_MSG)
+            await ctx.send(BOT_ERROR_MSG)
 
 @bot.command(name="blueprint")
-async def neural_blueprint(ctx, *, query: str = None):
-    """Neural Logic Engine. Generate AE expressions and technical blueprints."""
+async def technical_blueprint(ctx, *, query: str = None):
+    """Generate AE expressions and technical guides."""
     if not query:
-        await ctx.send("❌ **Query Required**: Describe the logic (e.g., '!blueprint pulsing glow synced to bass').")
+        await ctx.send("❌ **Need a description**: Tell me what you need (e.g., '!blueprint pulsing glow synced to bass').")
         return
     
     async with ctx.typing():
         try:
             prompt = f"""
-            You are a Senior Technical TD (Technical Director). The user needs an After Effects expression or logic blueprint for: '{query}'.
+            You are a Senior Motion Designer. The user needs an After Effects expression or logic guide for: '{query}'.
             Provide:
             1. **The Expression**: Clean, optimized code block.
-            2. **Logic Tree**: Step-by-step implementation guide.
-            3. **Neural Tip**: One advanced optimization for render performance.
+            2. **Guide**: Step-by-step setup.
+            3. **Pro Tip**: One tip for better performance.
             
-            Be extremely precise and surgical.
+            Be precise and helpful.
             """
             response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
             
-            # Use manifest logic
+            # Use Report logic
             with tempfile.NamedTemporaryFile(suffix=".txt", delete=False, mode='w', encoding='utf-8') as tf:
-                tf.write(f"PRIME NEURAL BLUEPRINT MANIFEST\n{'='*40}\nQUERY: {query.upper()}\n\n{response}")
+                tf.write(f"PRIME EXPRESSION GUIDE\n{'='*40}\nQUERY: {query.upper()}\n\n{response}")
                 temp_path = tf.name
-
+ 
             embed = discord.Embed(
-                title="⚙️ NEURAL LOGIC BLUEPRINT",
-                description=f"Generated technical manifest for: `{query}`\n\n*(Full blueprint attached as file)*",
+                title="⚙️ EXPRESSION GUIDE",
+                description=f"Generated a setup guide for: `{query}`\n\n*(Full guide attached as file)*",
                 color=0x00FFB4
             )
-            embed.set_footer(text="Logic Protocol • PRIME")
-            await ctx.send(embed=embed, file=discord.File(temp_path, filename=f"blueprint_{os.urandom(2).hex()}.txt"))
+            embed.set_footer(text="Prime | Expressions")
+            await ctx.send(embed=embed, file=discord.File(temp_path, filename=f"guide_{os.urandom(2).hex()}.txt"))
             
             try: os.remove(temp_path)
             except: pass
         except Exception as e:
-            await ctx.send(NEURAL_ERROR_MSG)
+            await ctx.send(BOT_ERROR_MSG)
 
 @bot.command(name="scout")
 async def talent_scout(ctx, member: discord.Member = None):
-    """Talent Manifest. Analyze a user for creative collectives/teams."""
+    """Analyze a user for creative teams."""
     member = member or ctx.author
     async with ctx.typing():
         try:
@@ -5890,35 +5903,35 @@ async def talent_scout(ctx, member: discord.Member = None):
             memory_summary = user_memory.get('profile_summary', 'Unknown') if user_memory else 'Unknown'
             
             prompt = f"""
-            Analyze this subject for an Elite Creative Collective.
+            Analyze this creator for a creative team.
             Subject: {member.name}
-            Neural Summary: {memory_summary}
-            Recent Logic: {chat_context}
+            Summary: {memory_summary}
+            Recent Messages: {chat_context}
             
-            Generate a 'Recruitment Manifesto' covering:
-            1. **Technical Proficiency**: Estimated skill in creative workflows.
-            2. **Aesthetic DNA**: The 'vibe' of their work/logic.
-            3. **Collective Compatibility**: How they fit in a high-tier team.
-            4. **Recruitment Verdict**: Tactical advice for team leaders.
+            Generate a 'Creator Report' covering:
+            1. **Skill Level**: Estimated skill in creative tasks.
+            2. **Style**: The 'vibe' of their work.
+            3. **Team Fit**: How they'd work in a team.
+            4. **Overall Verdict**: Solid advice for team leads.
             
-            Be technical and elitist.
+            Be direct and honest.
             """
             response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
             
             embed = discord.Embed(
-                title="🕵️ TALENT NEURAL MANIFESTO",
+                title="📑 CREATOR ANALYSIS",
                 description=response[:4000],
                 color=0x00FFB4,
                 timestamp=datetime.now(timezone.utc)
             )
-            embed.set_footer(text="Scout Protocol • PRIME")
+            embed.set_footer(text="Prime | Talent Analysis")
             await ctx.send(embed=embed)
         except Exception as e:
-            await ctx.send(NEURAL_ERROR_MSG)
+            await ctx.send(BOT_ERROR_MSG)
 
 @bot.command(name="phantom")
 async def spectral_phantom(ctx):
-    """Spectral Report. Analyze the sub-text and server power dynamics."""
+    """Analyze the channel's vibe and dynamics."""
     async with ctx.typing():
         try:
             messages = []
@@ -5928,41 +5941,41 @@ async def spectral_phantom(ctx):
             
             chat_blob = "\n".join(messages[::-1])
             prompt = f"""
-            Analyze the 'Spectral Sub-text' of this channel.
-            Don't just summarize; find the hidden power dynamics, the tension, the 'unspoken' vibe, and who is currently leading the narrative.
+            Analyze the 'vibe' of this channel.
+            Don't just summarize; find the hidden dynamics, the mood, and who is currently leading the conversation.
             
             CHAT LOGS:
             {chat_blob}
             
-            Be technical, mysterious, and sharp. Use terms like 'phantom', 'spectral', 'shadow', and 'protocol'.
+            Be observant and sharp. Don't use robotic language.
             """
             response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
             
             embed = discord.Embed(
-                title="👻 SPECTRAL PHANTOM REPORT",
+                title="👻 VIBE REPORT",
                 description=response[:4000],
                 color=0x6600FF,
                 timestamp=datetime.now(timezone.utc)
             )
-            embed.set_footer(text="Phantom Protocol • PRIME")
+            embed.set_footer(text="Prime | Channel Analysis")
             await ctx.send(embed=embed)
         except Exception as e:
-            await ctx.send(NEURAL_ERROR_MSG)
+            await ctx.send(BOT_ERROR_MSG)
 
 @bot.command(name="glitch")
-async def neural_glitch(ctx, *, text: str = None):
-    """Generate a glitched, industrial version of text."""
+async def text_glitch(ctx, *, text: str = None):
+    """Generate a stylized version of text."""
     if not text:
-        await ctx.send("❌ **Matrix Error**: Provide text to glitch (e.g., '!glitch PRIME').")
+        await ctx.send("❌ **Error**: Provide text to glitch (e.g., '!glitch PRIME').")
         return
     
     async with ctx.typing():
         try:
-            prompt = f"Convert the following text into a 'tuff', glitched, and industrial-grade ASCII/Unicode art version or a highly stylized name for a discord bio: '{text}'. Use symbols like █, ▓, ░, ⚡, 🧬, 🦾, ⛓️."
+            prompt = f"Convert the following text into a 'tuff', stylized version for a discord bio: '{text}'. Use cool symbols naturally."
             response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
-            await ctx.send(f"⚡ **GLITCHED MANIFEST**:\n```\n{response[:1900]}\n```")
+            await ctx.send(f"⚡ **STYLED TEXT**:\n```\n{response[:1900]}\n```")
         except Exception as e:
-            await ctx.send(NEURAL_ERROR_MSG)
+            await ctx.send(BOT_ERROR_MSG)
 
 @bot.command(name="uplift")
 async def aesthetic_uplift(ctx):
@@ -5975,22 +5988,22 @@ async def aesthetic_uplift(ctx):
                     messages.append(f"{msg.author.name}: {msg.content}")
             
             chat_context = "\n".join(messages[::-1])
-            prompt = f"Analyze this recent creative discussion: '{chat_context}'. Suggest 3 HIGH-TIER, technical ways to uplift the aesthetic quality of what's being discussed (e.g., suggesting specific Sapphire plugins, color grading techniques, or workflow optimizations). Be technical and elitist."
+            prompt = f"Analyze this recent creative discussion: '{chat_context}'. Suggest 3 solid, technical ways to improve the quality of what's being discussed (e.g., suggesting specific plugins, techniques, or optimizations). Be helpful and direct."
             response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
             
             embed = discord.Embed(
-                title="✨ AESTHETIC UPLIFT PROTOCOL",
+                title="✨ QUALITY UPLIFT",
                 description=response[:4000],
                 color=0x00FFB4,
                 timestamp=datetime.now(timezone.utc)
             )
-            embed.set_footer(text="Uplift Protocol • PRIME")
+            embed.set_footer(text="Prime | Quality Control")
             await ctx.send(embed=embed)
         except Exception as e:
-            await ctx.send(NEURAL_ERROR_MSG)
+            await ctx.send(BOT_ERROR_MSG)
 
 @bot.command(name="sandbox")
-async def neural_sandbox(ctx, *, expression: str = None):
+async def expression_sandbox(ctx, *, expression: str = None):
     """Analyze and optimize After Effects expressions."""
     if not expression:
         await ctx.send("❌ **Query Required**: Provide an AE expression to analyze.")
@@ -5998,18 +6011,18 @@ async def neural_sandbox(ctx, *, expression: str = None):
     
     async with ctx.typing():
         try:
-            prompt = f"Analyze this After Effects expression: '{expression}'. 1. Detect any potential errors. 2. Provide an optimized 'Industrial Grade' version. 3. Explain the logic briefly."
+            prompt = f"Analyze this After Effects expression: '{expression}'. 1. Detect any errors. 2. Provide an optimized version. 3. Explain the logic briefly."
             response = get_gemini_response(prompt, ctx.author.id, username=ctx.author.name)
             
             embed = discord.Embed(
-                title="🧪 NEURAL SANDBOX DIAGNOSTIC",
+                title="🧪 EXPRESSION ANALYSIS",
                 description=response[:4000],
                 color=0x00FFB4
             )
-            embed.set_footer(text="Sandbox Protocol • PRIME")
+            embed.set_footer(text="Prime | AE Sandbox")
             await ctx.send(embed=embed)
         except Exception as e:
-            await ctx.send(NEURAL_ERROR_MSG)
+            await ctx.send(BOT_ERROR_MSG)
 
 @bot.command(name="override")
 async def secret_override(ctx):
@@ -6020,24 +6033,24 @@ async def secret_override(ctx):
         return
     
     embed = discord.Embed(
-        title="🕵️ BLACK-OPS OVERRIDE: SECRET PROTOCOLS",
-        description="Restricted management interface for PRIME creator.",
+        title="🕵️ PRIME OVERRIDE: DEVELOPER TOOLS",
+        description="Management interface for BMR.",
         color=0xFF0000
     )
     
-    embed.add_field(name="🔒 System Matrix", value="`!debug_memory`: View raw neural memory\n`!purge_cache`: Clear temporary protocol buffers\n`!force_rotate`: Manually cycle API key matrix\n`!server_scan`: High-resolution security probe", inline=False)
-    embed.add_field(name="🧬 Neural Tuning", value="`!tweak_vibe @user [vibe]`: Force-update user's neural aura\n`!wipe_history @user`: Purge user's conversation matrix", inline=False)
+    embed.add_field(name="🔒 System Control", value="`!debug_memory`: View raw user memory\n`!purge_cache`: Clear temporary buffers\n`!force_rotate`: Manually cycle API keys\n`!server_scan`: Security check", inline=False)
+    embed.add_field(name="🧬 Profile Tuning", value="`!tweak_vibe @user [vibe]`: Force-update user's vibe\n`!wipe_history @user`: Purge user's history", inline=False)
     
-    embed.set_footer(text="CREATOR ACCESS GRANTED • PRIME")
+    embed.set_footer(text="DEVELOPER ACCESS • PRIME")
     await ctx.author.send(embed=embed)
-    await ctx.send("🛡️ **Override Protocol Initialized**: Check your DMs, Creator.", delete_after=5)
+    await ctx.send("🛡️ **Override Active**: Check your DMs, BMR.", delete_after=5)
 
 @bot.command(name="force_rotate")
 async def manual_rotate(ctx):
     """Creator only: Manually cycle API keys."""
     if 'bmr' not in ctx.author.name.lower(): return
     rotate_gemini_key()
-    await ctx.send(f"🔄 **Matrix Manual Rotation**: Switched to key position {current_key_index + 1}.")
+    await ctx.send(f"🔄 **Manual Rotation**: Switched to key position {current_key_index + 1}.")
 
 def run_bot():
     """Function to start the bot with the token from environment variables."""
