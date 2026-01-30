@@ -3998,6 +3998,21 @@ async def on_message(message):
         
         # If editing help detected but NOT mentioned (regular chat context), just continue to normal chat handling
         # Don't treat it as tutorial, just normal response
+
+        # *** ROAST HANDLER ***
+        # If user asks to roast someone else, ping them directly instead of replying to author
+        if 'roast' in prompt_lower or 'cook' in prompt_lower:
+            target_to_roast = next((m for m in message.mentions if m.id != bot.user.id), None)
+            if target_to_roast:
+                async with message.channel.typing():
+                    # Generate roast
+                    roast_prompt = f"Roast this user: {target_to_roast.name}. Be savage, funny, and direct. Context: {message.content}"
+                    # Use a clean prompt to avoid the bot getting confused by the 'reply' context
+                    response = get_gemini_response(roast_prompt, message.author.id, username=message.author.name)
+                    
+                    # Send response mentioning the target (Not a reply to the author)
+                    await message.channel.send(f"{target_to_roast.mention} {response}")
+                return
         
         # Check if user is asking for an image or video
         is_image_request = any(keyword in prompt_lower for keyword in ['send me', 'get me', 'find me', 'show me', 'give me', 'image', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'picture', 'photo', 'screenshot'])
