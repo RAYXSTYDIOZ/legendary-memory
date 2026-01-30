@@ -156,6 +156,8 @@ LEGENDARY_ROLE_ID = int(os.getenv("LEGENDARY_ROLE_ID", "0"))
 AE_ROLE_ID = int(os.getenv("AE_ROLE_ID", "0"))
 AM_ROLE_ID = int(os.getenv("AM_ROLE_ID", "0"))
 CAPCUT_ROLE_ID = int(os.getenv("CAPCUT_ROLE_ID", "0"))
+PR_ROLE_ID = int(os.getenv("PR_ROLE_ID", "0"))
+PS_ROLE_ID = int(os.getenv("PS_ROLE_ID", "0"))
 OTHER_EDIT_ROLE_ID = int(os.getenv("OTHER_EDIT_ROLE_ID", "0"))
 GIVEAWAY_ROLE_ID = int(os.getenv("GIVEAWAY_ROLE_ID", "0"))
 
@@ -1203,15 +1205,15 @@ async def handle_automatic_media_review(message):
         return False
 
 async def handle_automatic_resources(message):
-    """Automatically provide helpful links/assets if a user asks where to find them."""
+    """Automatically provide helpful links/assets or send the file directly if a user asks for them."""
     try:
         if message.author.bot:
             return False
             
         prompt_lower = message.content.lower()
         # Expanded triggers and keywords for more intelligent proactive detection
-        resource_triggers = ['where to get', 'where can i get', 'where can i find', 'where to find', 'looking for', 'any good', 'is there a', 'need some', 'anyone got', 'get me', 'send me', 'find me']
-        resource_keywords = ['sfx', 'overlay', 'preset', 'font', 'texture', 'lut', 'vfx', 'pack', 'cc', 'brush', 'plugin', 'shake', 'quality']
+        resource_triggers = ['where to get', 'where can i get', 'where can i find', 'where to find', 'looking for', 'any good', 'is there a', 'need some', 'anyone got', 'get me', 'send me', 'find me', 'i need', 'i want', 'can someone send', 'anyone have', 'send over', 'gimme']
+        resource_keywords = ['sfx', 'overlay', 'preset', 'font', 'texture', 'lut', 'vfx', 'pack', 'cc', 'brush', 'plugin', 'shake', 'quality', 'png', 'jpg', 'jpeg', 'image', 'img', 'asset', 'stock', 'clip', 'video', 'background', 'cloud', 'smoke', 'fire', 'flare', 'dust', 'grain', 'particles', 'light', 'leak']
         
         has_trigger = any(trigger in prompt_lower for trigger in resource_triggers)
         has_keyword = any(kw in prompt_lower for kw in resource_keywords)
@@ -1223,6 +1225,25 @@ async def handle_automatic_resources(message):
                 query_res = safe_generate_content(model="gemini-1.5-flash", contents=[extraction_prompt])
                 search_query = query_res.text.strip() if query_res and query_res.text else message.content
                 
+                # --- AUTO-FILE DELIVERY (Proactive) ---
+                # If it's an image-style asset, try to find/generate and send it directly
+                is_file_asset = any(kw in search_query.lower() for kw in ['png', 'jpg', 'image', 'picture', 'art', 'cloud', 'smoke', 'fire', 'flare', 'overlay', 'texture', 'asset'])
+                
+                if is_file_asset:
+                    image_path = None
+                    # For clouds or specific stylistic assets, generation is often elite
+                    if any(kw in search_query.lower() for kw in ['cloud', 'fire', 'smoke', 'flare', 'light']):
+                        image_path = await generate_image(search_query)
+                    else:
+                        image_path = await search_and_download_image(search_query)
+                    
+                    if image_path and os.path.exists(image_path):
+                         await message.reply(content=f"found this **{search_query}** for you. hope it hits.", file=discord.File(image_path))
+                         try: os.remove(image_path)
+                         except: pass
+                         return True
+
+                # --- LINK SUGGESTIONS (Fallback) ---
                 # Perform real-time Google Search
                 search_results = await search_google(f"high quality {search_query} for editing download")
                 
@@ -1243,6 +1264,7 @@ async def handle_automatic_resources(message):
                 response = get_gemini_response(prompt, message.author.id, username=message.author.name)
                 if response:
                     header = random.choice([
+                        "Status: Detected Asset Request.",
                         "📂 **Found some elite stuff for you:**",
                         "📦 **Check these out:**",
                         "💡 **Curated links:**",
