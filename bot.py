@@ -1483,7 +1483,7 @@ Be specific with menu locations and techniques. Assume the user is editing in Ad
         return response.text
     except Exception as e:
         logger.error(f"Video analysis error: {str(e)}")
-        return BOT_ERROR_MSG
+        return f"{BOT_ERROR_MSG} [DEBUG: {str(e)}]"
 
 def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tutorial=False, software=None, brief=False):
     """Get response from Gemini AI with optional image analysis and persistent memory."""
@@ -1566,7 +1566,7 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
             
             # Fallback model list - prioritize user's choice and use standard names
             models_to_try = [
-                PRIMARY_MODEL, 
+                PRIMARY_MODEL,
                 "gemini-2.0-flash", 
                 "gemini-2.0-flash-exp", 
                 "gemini-1.5-flash", 
@@ -1627,7 +1627,7 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
 
     except Exception as e:
         logger.error(f"Gemini API error: {str(e)}")
-        return BOT_ERROR_MSG
+        return f"{BOT_ERROR_MSG} [DEBUG: {str(e)}]"
 
 async def reflect_on_user(user_id, username, latest_user_msg, latest_bot_res):
     """
