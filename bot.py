@@ -362,7 +362,7 @@ async def revive_chat():
         )
         
         # Use a generic user ID (0) for the automated task, but tell it it's "one of the boys"
-        response = get_gemini_response(prompt, user_id=0, username="Vibes")
+        response = get_gemini_response(prompt, user_id=0, username="Vibes", model="gemini-1.5-flash")
         
         if response and "BMR" not in response:
             # Clean response of backticks or extra formatting if Gemini adds them
@@ -400,7 +400,7 @@ async def daily_insight():
             "Tone: Chill, expert, direct. No 'top 10' list stuff. Just one deep-cut tip. "
             "Format it with a clean title and clear steps. No robot talk."
         )
-        response = get_gemini_response(prompt, user_id=0, username="Elite")
+        response = get_gemini_response(prompt, user_id=0, username="Elite", model="gemini-1.5-flash")
         if response:
             header = "💡 **Today's Elite Insight**"
             await channel.send(f"{header}\n\n{response}")
@@ -439,7 +439,7 @@ async def creative_pulse():
             "Tone: Chill, direct, high-tier partner. NO robot talk. Use lowercase naturally. "
             "Example: 'vibe is high today, glad to see everyone finally figuring out the new tools.' or 'chat is cookin, keep that energy up for the new week.'"
         )
-        response = get_gemini_response(prompt, user_id=0, username="System")
+        response = get_gemini_response(prompt, user_id=0, username="System", model="gemini-1.5-flash")
         if response:
             await channel.send(f"🌊 {response}")
             logger.info("Sent creative pulse update.")
@@ -1200,7 +1200,7 @@ async def handle_automatic_media_review(message):
                 
                 if is_image:
                     image_bytes = await download_image(attachment.url)
-                    response = get_gemini_response(prompt, message.author.id, username=message.author.name, image_bytes=image_bytes)
+                    response = get_gemini_response(prompt, message.author.id, username=message.author.name, image_bytes=image_bytes, model="gemini-1.5-flash")
                 else:
                     video_bytes = await download_video(attachment.url, attachment.filename)
                     response = await analyze_video(video_bytes, attachment.filename, message.author.id)
@@ -1290,7 +1290,7 @@ async def handle_automatic_resources(message):
                 # Use a cleaner prompt system to bypass the 'creative partner' lecturing
                 # We prepend a instruction to stop the chat vibing
                 clean_prompt = f"[SYSTEM: RESPOND BRIEFLY WITH LINKS ONLY. NO DESIGN LECTURES.] {prompt}"
-                response = get_gemini_response(clean_prompt, message.author.id, username=message.author.name)
+                response = get_gemini_response(clean_prompt, message.author.id, username=message.author.name, model="gemini-1.5-flash")
                 
                 if response:
                     header = random.choice([
@@ -1373,7 +1373,7 @@ async def handle_automatic_motivation(message):
                         "Tell them about the 'ugly phase' of a project or how the best work comes from the most frustration. "
                         "No robot talk. One or two sentences max."
                     )
-                    response = get_gemini_response(prompt, message.author.id, username=message.author.name)
+                    response = get_gemini_response(prompt, message.author.id, username=message.author.name, model="gemini-1.5-flash")
                     if response:
                         await message.reply(f"🌊 **Steady your flow.**\n\n{response}")
                         return True
@@ -1944,7 +1944,7 @@ async def update_user_personality(user_id, username):
     except Exception as e:
         logger.error(f"Error updating user personality: {e}")
 
-def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tutorial=False, software=None, brief=False):
+def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tutorial=False, software=None, brief=False, model=None):
     """Get response from Gemini AI with optional image analysis and persistent memory."""
     try:
         # 1. Load User Memory from Database
@@ -1990,7 +1990,7 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
             
             # Use the new google-genai SDK format for image analysis
             response = safe_generate_content(
-                model=PRIMARY_MODEL,
+                model=model if model else PRIMARY_MODEL,
                 contents=[
                     types.Part.from_bytes(
                         data=image_bytes,
@@ -2025,7 +2025,7 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
             # Actually, the simplest way is to pass 'config=types.GenerateContentConfig(system_instruction=...)'
             
             # Fallback model list - prioritize user's choice and use standard names
-            models_to_try = [
+            models_to_try = [model] if model else [
                 PRIMARY_MODEL,
                 "gemini-2.0-flash", 
                 "gemini-flash-latest",
@@ -3586,7 +3586,7 @@ async def on_message(message):
             # Now provide the BRIEF tutorial response
             prompt = state['original_question']
             async with message.channel.typing():
-                response = get_gemini_response(prompt, user_id, username=message.author.name, is_tutorial=True, software=software, brief=True)
+                response = get_gemini_response(prompt, user_id, username=message.author.name, is_tutorial=True, software=software, brief=True, model="gemini-1.5-flash")
             logger.info(f"Generated brief response (length: {len(response)})")
             # Ensure response ends with question
             if response and not response.strip().endswith('?'):
@@ -3796,7 +3796,7 @@ async def on_message(message):
             if any(word in user_message for word in ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'please', 'y', 'more', 'detail', 'tell me']):
                 # Provide detailed explanation
                 async with message.channel.typing():
-                    response = get_gemini_response(prompt, user_id, username=message.author.name, is_tutorial=True, software=software, brief=False)
+                    response = get_gemini_response(prompt, user_id, username=message.author.name, is_tutorial=True, software=software, brief=False, model="gemini-1.5-flash")
                 logger.info(f"Generated detailed response (length: {len(response)})")
                 # Try to send as one message if under Discord limit
                 if len(response) <= 1900:
@@ -3978,7 +3978,7 @@ async def on_message(message):
                         'software': mentioned_software
                     }
                     async with message.channel.typing():
-                        response = get_gemini_response(prompt_lower, user_id, username=message.author.name, is_tutorial=True, software=mentioned_software, brief=True)
+                        response = get_gemini_response(prompt_lower, user_id, username=message.author.name, is_tutorial=True, software=mentioned_software, brief=True, model="gemini-1.5-flash")
                     
                     if response and not response.strip().endswith('?'):
                         response = response.strip() + "\n\nWant a detailed step-by-step explanation?"
