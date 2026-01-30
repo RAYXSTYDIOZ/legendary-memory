@@ -2179,6 +2179,8 @@ async def generate_image(description: str):
                     temp_file.write(image_data)
                     temp_file.close()
                     return temp_file.name
+    except Exception as e:
+        logger.error(f"Error generating image: {str(e)}")
     
     return None
 
