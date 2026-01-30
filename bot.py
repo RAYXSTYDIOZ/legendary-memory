@@ -1212,40 +1212,47 @@ async def handle_automatic_resources(message):
             
         prompt_lower = message.content.lower()
         # Expanded triggers and keywords for more intelligent proactive detection
-        resource_triggers = ['where to get', 'where can i get', 'where can i find', 'where to find', 'looking for', 'any good', 'is there a', 'need some', 'anyone got', 'get me', 'send me', 'find me', 'i need', 'i want', 'can someone send', 'anyone have', 'send over', 'gimme']
-        resource_keywords = ['sfx', 'overlay', 'preset', 'font', 'texture', 'lut', 'vfx', 'pack', 'cc', 'brush', 'plugin', 'shake', 'quality', 'png', 'jpg', 'jpeg', 'image', 'img', 'asset', 'stock', 'clip', 'video', 'background', 'cloud', 'smoke', 'fire', 'flare', 'dust', 'grain', 'particles', 'light', 'leak']
+        resource_triggers = ['where to get', 'where can i get', 'where can i find', 'where to find', 'looking for', 'any good', 'is there a', 'need some', 'anyone got', 'get me', 'send me', 'find me', 'i need', 'i want', 'can someone send', 'anyone have', 'send over', 'gimme', 'is there a', 'looking for a']
+        resource_keywords = ['sfx', 'overlay', 'preset', 'font', 'texture', 'lut', 'vfx', 'pack', 'cc', 'brush', 'plugin', 'shake', 'quality', 'png', 'jpg', 'jpeg', 'image', 'img', 'asset', 'stock', 'clip', 'video', 'background', 'cloud', 'smoke', 'fire', 'flare', 'dust', 'grain', 'particles', 'light', 'leak', 'sound effect']
         
         has_trigger = any(trigger in prompt_lower for trigger in resource_triggers)
         has_keyword = any(kw in prompt_lower for kw in resource_keywords)
                 
         if has_trigger and has_keyword:
+            # Send an immediate status message to show we're working on it
+            status_msg = await message.reply("🛰️ **Status: Asset Request Detected. Scanning for elite resources...**")
+            
             async with message.channel.typing():
                 # Use Gemini to extract a clean search query for more accuracy
-                extraction_prompt = f"Extract only the asset/resource name from this request: '{message.content}'. Just return the name, e.g., 'vibe sfx' or 'glitch overlays'."
+                extraction_prompt = f"Extract only the asset/resource name from this request: '{message.content}'. Remove words like 'a', 'an', 'the', 'some', 'any', 'i need', 'find me', etc. Just return the clean noun, e.g., 'cloud png' or 'vibe sfx'."
                 query_res = safe_generate_content(model="gemini-1.5-flash", contents=[extraction_prompt])
                 search_query = query_res.text.strip() if query_res and query_res.text else message.content
+                search_query = search_query.replace('"', '').replace("'", "") # Clean quotes
                 
                 # --- AUTO-FILE DELIVERY (Proactive) ---
                 # If it's an image-style asset, try to find/generate and send it directly
-                is_file_asset = any(kw in search_query.lower() for kw in ['png', 'jpg', 'image', 'picture', 'art', 'cloud', 'smoke', 'fire', 'flare', 'overlay', 'texture', 'asset'])
+                is_file_asset = any(kw in search_query.lower() for kw in ['png', 'jpg', 'image', 'picture', 'art', 'cloud', 'smoke', 'fire', 'flare', 'overlay', 'texture', 'asset', 'background'])
                 
                 if is_file_asset:
                     image_path = None
-                    # For clouds or specific stylistic assets, generation is often elite
-                    if any(kw in search_query.lower() for kw in ['cloud', 'fire', 'smoke', 'flare', 'light']):
-                        image_path = await generate_image(search_query)
+                    # For atmospheric assets, generation is elite
+                    is_atmospheric = any(kw in search_query.lower() for kw in ['cloud', 'fire', 'smoke', 'flare', 'light', 'sky', 'stars', 'galaxy'])
+                    
+                    if is_atmospheric:
+                        image_path = await generate_image(f"{search_query} high quality isolated on black background")
                     else:
                         image_path = await search_and_download_image(search_query)
                     
                     if image_path and os.path.exists(image_path):
-                         await message.reply(content=f"found this **{search_query}** for you. hope it hits.", file=discord.File(image_path))
+                         await status_msg.edit(content=f"✅ **Found it.** Sending your **{search_query}** now.")
+                         await message.reply(content=f"Found some elite **{search_query}** for you. Hope it hits.", file=discord.File(image_path))
                          try: os.remove(image_path)
                          except: pass
                          return True
 
                 # --- LINK SUGGESTIONS (Fallback) ---
                 # Perform real-time Google Search
-                search_results = await search_google(f"high quality {search_query} for editing download")
+                search_results = await search_google(f"high quality {search_query} download for editing")
                 
                 context_info = ""
                 if search_results:
@@ -1261,17 +1268,23 @@ async def handle_automatic_resources(message):
                 Focus on quality over quantity. Talk like an elite creative partner who knows the industry secrets.
                 """
                 
+                # Use a background task for Gemini response to avoid blocking if the sync version is slow
                 response = get_gemini_response(prompt, message.author.id, username=message.author.name)
+                
                 if response:
                     header = random.choice([
-                        "Status: Detected Asset Request.",
-                        "📂 **Found some elite stuff for you:**",
+                        "🎨 **Curated elite resources:**",
+                        "📂 **Found some high-tier stuff:**",
                         "📦 **Check these out:**",
-                        "💡 **Curated links:**",
+                        "💡 **Pro-level links:**",
                         "🚀 **Top picks for you:**"
                     ])
-                    await message.reply(f"{header}\n\n{response}")
+                    await status_msg.edit(content=f"{header}\n\n{response}")
                     return True
+            
+            # If everything failed
+            await status_msg.edit(content="❌ Couldn't find a direct file, but check out **TextureLabs.org** or **Envato** for the best quality.")
+            return True # Still return True so on_message doesn't trigger again
         return False
     except Exception as e:
         logger.error(f"Error in automatic resources: {e}")
