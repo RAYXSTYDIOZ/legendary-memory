@@ -1209,33 +1209,35 @@ async def handle_automatic_resources(message):
             return False
             
         prompt_lower = message.content.lower()
-        # Look for "where can i find", "looking for", "need some", "any good" + resource keywords
-        looking_triggers = ['looking for', 'where can i get', 'where to find', 'any good', 'is there a', 'need some', 'anyone got']
-        resource_keywords = {
-            'sfx': 'Sound Effects',
-            'overlay': 'Video Overlays',
-            'preset': 'After Effects / Premiere Presets',
-            'font': 'High-end Typography Fonts',
-            'texture': 'Paper/Film/Grain Textures',
-            'luts': 'Color Grading LUTs',
-            'vfx': 'Visual Effects'
-        }
+        # Expanded triggers and keywords for more intelligent proactive detection
+        resource_triggers = ['where to get', 'where can i get', 'where can i find', 'where to find', 'looking for', 'any good', 'is there a', 'need some', 'anyone got', 'get me', 'send me', 'find me']
+        resource_keywords = ['sfx', 'overlay', 'preset', 'font', 'texture', 'lut', 'vfx', 'pack', 'cc', 'brush', 'plugin', 'shake', 'quality']
         
-        has_trigger = any(trigger in prompt_lower for trigger in looking_triggers)
-        found_resource = None
-        for kw, name in resource_keywords.items():
-            if kw in prompt_lower:
-                found_resource = name
-                break
+        has_trigger = any(trigger in prompt_lower for trigger in resource_triggers)
+        has_keyword = any(kw in prompt_lower for kw in resource_keywords)
                 
-        if has_trigger and found_resource:
+        if has_trigger and has_keyword:
             async with message.channel.typing():
-                # Instead of just searching, let's have Gemini find top-tier niches for them
+                # Use Gemini to extract a clean search query for more accuracy
+                extraction_prompt = f"Extract only the asset/resource name from this request: '{message.content}'. Just return the name, e.g., 'vibe sfx' or 'glitch overlays'."
+                query_res = safe_generate_content(model="gemini-1.5-flash", contents=[extraction_prompt])
+                search_query = query_res.text.strip() if query_res and query_res.text else message.content
+                
+                # Perform real-time Google Search
+                search_results = await search_google(f"high quality {search_query} for editing download")
+                
+                context_info = ""
+                if search_results:
+                    context_info = "\n\nCRITICAL: Here are some REAL Google Search results I found. Use these links to give the user direct access to the assets:\n"
+                    for res in search_results:
+                        context_info += f"- {res['title']}: {res['link']}\n"
+
                 prompt = f"""
-                A user is looking for {found_resource}. 
-                Suggest 3 elite, high-quality, and preferably 'underground' or professional sources for this. 
-                Focus on quality over quantity. Talk like a pro who knows the industry secrets. No generic sites like 'YouTube' or 'Google'.
-                Mention specific creators or boutique asset shops.
+                A user is looking for {search_query}. 
+                {context_info}
+                
+                Suggest elite, high-quality sources. Mention the specific links I found if any.
+                Focus on quality over quantity. Talk like an elite creative partner who knows the industry secrets.
                 """
                 
                 response = get_gemini_response(prompt, message.author.id, username=message.author.name)
@@ -2177,7 +2179,34 @@ async def generate_image(description: str):
                     temp_file.write(image_data)
                     temp_file.close()
                     return temp_file.name
-        
+    
+    return None
+
+async def search_google(query):
+    """Search Google using Serper API and return top organic results."""
+    api_key = os.getenv("SERPER_API_KEY")
+    if not api_key:
+        logger.warning("SERPER_API_KEY not found in environment. Google Search is disabled.")
+        return None
+    
+    url = "https://google.serper.dev/search"
+    payload = json.dumps({"q": query, "num": 5})
+    headers = {
+        'X-API-KEY': api_key,
+        'Content-Type': 'application/json'
+    }
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, data=payload, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get('organic', [])
+                else:
+                    logger.error(f"Serper API error: {response.status}")
+                    return None
+    except Exception as e:
+        logger.error(f"Google Search failed: {e}")
         return None
     except Exception as e:
         logger.error(f"Error generating image: {str(e)}")
@@ -3764,8 +3793,8 @@ async def on_message(message):
     #     return
         
     # Trigger AI resource suggestions automatically
-    # if await handle_automatic_resources(message):
-    #     return
+    if await handle_automatic_resources(message):
+        return
         
     # Trigger AI role suggestions if they mention software they don't have a role for
     # if await handle_automatic_role_suggestion(message):
@@ -3852,7 +3881,7 @@ async def on_message(message):
         is_dm_message = is_dm
         is_mentioned = bot.user.mentioned_in(message)
         
-        # Check if this is about tutorials - if so, ask which software FIRST
+        # *** TUTORIALS & HELP - PRIORITY #4 ***
         is_help = any(word in prompt_lower for word in ['help', 'tutorial', 'how to', 'teach', 'guide', 'learn', 'explain', 'show me', 'assist', 'how do i', 'how can i', 'how do you', 'create', 'make', 'do', 'show me'])
         is_editing_help = is_help and any(keyword in prompt_lower for keyword in ['edit', 'effect', 'render', 'color', 'grade', 'video', 'after effects', 'premiere', 'photoshop', 'resolve', 'capcut', 'topaz', 'cc', 'grading', 'correction', 'effects', 'transition', 'animation', 'vfx', 'motion'])
         
