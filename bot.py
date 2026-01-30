@@ -2991,19 +2991,19 @@ async def on_ready():
             logger.info("Account maturity check loop started.")
 
         # Start chat revival loop
-        if not revive_chat.is_running():
-            revive_chat.start()
-            logger.info("Chat revival loop started.")
+        # if not revive_chat.is_running():
+        #     revive_chat.start()
+        #     logger.info("Chat revival loop started.")
 
         # Start daily insight loop
-        if not daily_insight.is_running():
-            daily_insight.start()
-            logger.info("Daily insight loop started.")
+        # if not daily_insight.is_running():
+        #     daily_insight.start()
+        #     logger.info("Daily insight loop started.")
 
         # Start creative pulse loop
-        if not creative_pulse.is_running():
-            creative_pulse.start()
-            logger.info("Creative pulse loop started.")
+        # if not creative_pulse.is_running():
+        #     creative_pulse.start()
+        #     logger.info("Creative pulse loop started.")
 
         # Register persistent views
         bot.add_view(SelfRoleView())
@@ -3758,22 +3758,22 @@ async def on_message(message):
     # Check server security (invites, suspicious behavior)
     await check_server_security(message)
     
-    # --- AUTOMATIC ENGAGEMENT FEATURES ---
+    # --- AUTOMATIC ENGAGEMENT FEATURES (DISABLED) ---
     # Trigger AI feedback on WIPs/Media automatically
-    if await handle_automatic_media_review(message):
-        return
+    # if await handle_automatic_media_review(message):
+    #     return
         
     # Trigger AI resource suggestions automatically
-    if await handle_automatic_resources(message):
-        return
+    # if await handle_automatic_resources(message):
+    #     return
         
     # Trigger AI role suggestions if they mention software they don't have a role for
-    if await handle_automatic_role_suggestion(message):
-        pass # Don't return, allow other things to happen
+    # if await handle_automatic_role_suggestion(message):
+    #     pass # Don't return, allow other things to happen
         
     # Trigger AI motivation if they feel stuck/burnt out
-    if await handle_automatic_motivation(message):
-        return
+    # if await handle_automatic_motivation(message):
+    #     return
     
     # Process commands first and stop if it's a command
     await bot.process_commands(message)
