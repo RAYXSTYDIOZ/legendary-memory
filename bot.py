@@ -68,14 +68,15 @@ else:
     logger.error("❌ CRITICAL: NO API KEY DETECTED. Check Railway Variables for 'Gemini_key'.")
 
 # --- GLOBAL CONFIGURATION ---
-PRIMARY_MODEL = "gemini-1.5-flash"
+# --- GLOBAL CONFIGURATION ---
+PRIMARY_MODEL = "gemini-3-flash-preview"
 SECRET_LOG_CHANNEL_ID = 1456312201974644776
 
 if not GEMINI_KEYS:
     logger.error("❌ NO GEMINI API KEYS FOUND IN ENVIRONMENT")
     gemini_client = None
 else:
-    gemini_client = genai.Client(api_key=GEMINI_KEYS[current_key_index])
+    gemini_client = genai.Client(api_key=GEMINI_KEYS[current_key_index], http_options={'api_version': 'v1beta'})
 
 def rotate_gemini_key():
     """Rotate to the next available API key."""
@@ -84,7 +85,7 @@ def rotate_gemini_key():
         return False
     
     current_key_index = (current_key_index + 1) % len(GEMINI_KEYS)
-    gemini_client = genai.Client(api_key=GEMINI_KEYS[current_key_index])
+    gemini_client = genai.Client(api_key=GEMINI_KEYS[current_key_index], http_options={'api_version': 'v1beta'})
     logger.info(f"🔄 Switched to API Key Position: {current_key_index + 1}")
     return True
 
