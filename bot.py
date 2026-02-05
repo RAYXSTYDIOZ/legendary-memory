@@ -2453,20 +2453,15 @@ class RoleRequestView(discord.ui.View):
             'guild_id': interaction.guild.id
         }
         
-        try:
-            prompt_msg = (
-                f"**<@&{role_id}> Verification**\n\n"
-                f"To verify, please send a **single message** (click 'cancel' to stop) containing:\n"
-                f"1. A screenshot of your **YouTube Studio** (logged in) clearly showing your subscriber count.\n"
-                f"2. The **link** to your YouTube channel.\n\n"
-                f"I will analyze the screenshot to verify your eligibility for **{min_subs:,}**+ subscribers.\n"
-                f"*Type 'cancel' to cancel this request.*"
-            )
-            await interaction.user.send(prompt_msg)
-            await interaction.response.send_message("📬 I've sent you the verification instructions in your DMs!", ephemeral=True)
-        except discord.Forbidden:
-            await interaction.response.send_message("❌ **Error**: I couldn't send you a DM. Please enable DMs from server members and try again.", ephemeral=True)
-            del user_states[user_id]
+        prompt_msg = (
+            f"**<@&{role_id}> Verification**\n\n"
+            f"To verify, please send a **single message** (click 'cancel' to stop) containing:\n"
+            f"1. A screenshot of your **YouTube Studio** (logged in) clearly showing your subscriber count.\n"
+            f"2. The **link** to your YouTube channel.\n\n"
+            f"I will analyze the screenshot to verify your eligibility for **{min_subs:,}**+ subscribers.\n"
+            f"*Type 'cancel' to cancel this request.*"
+        )
+        await interaction.response.send_message(prompt_msg, ephemeral=True)
 
 class AppealButtonView(discord.ui.View):
     def __init__(self, guild_id: int, appeal_type: str = "BAN"):
@@ -3723,7 +3718,14 @@ async def on_message(message):
                     final_response = None
                     if is_verified:
                         role_id = state['role_id']
-                        guild = bot.get_guild(state.get('guild_id'))
+                        # Robust guild and role retrieval
+                        guild = message.guild
+                        if not guild:
+                             guild = bot.get_guild(state.get('guild_id'))
+                        if not guild and state.get('guild_id'):
+                             try: guild = await bot.fetch_guild(state.get('guild_id'))
+                             except: pass
+                             
                         role = guild.get_role(role_id) if guild else None
                         
                         if role:
