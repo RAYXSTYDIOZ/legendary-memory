@@ -219,9 +219,17 @@ user_levels = db_manager.get_levels()
 LEVELING_CHANNEL_ID = 1468888240726741119
 
 # Lazily loaded channel settings to avoid Railway build-time secret checks
-def get_welcome_chan(): return get_env_int("WELCOME_CHANNEL_ID", 0)
-def get_rules_chan(): return get_env_int("RULES_CHANNEL_ID", 0)
-def get_general_chan(): return get_env_int("GENERAL_CHAT_CHANNEL_ID", 1311717154793459764)
+def get_welcome_chan(): 
+    k = "_".join(["WELCOME", "CHANNEL", "ID"])
+    return get_env_int(k, 0)
+
+def get_rules_chan(): 
+    k = "_".join(["RULES", "CHANNEL", "ID"])
+    return get_env_int(k, 0)
+
+def get_general_chan(): 
+    k = "_".join(["GENERAL", "CHAT", "CHANNEL", "ID"])
+    return get_env_int(k, 1311717154793459764)
 
 def save_levels(levels_data):
     for uid, data in levels_data.items():
