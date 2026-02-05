@@ -1811,9 +1811,9 @@ async def leveling_handler(message):
         embed.set_footer(text="Keep chatting to earn more XP!")
         await message.channel.send(embed=embed, delete_after=15)
     
-    # Periodically save levels
-    if random.random() < 0.2: # 20% chance to save to reduce disk I/O
-        save_levels(user_levels)
+    # Save levels immediately to prevent data loss on restart
+    db_manager.save_level(user_id, user_levels[user_id]["xp"], user_levels[user_id]["level"])
+
 
 @bot.event
 async def on_member_remove(member):

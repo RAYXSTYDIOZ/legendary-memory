@@ -7,8 +7,24 @@ from datetime import datetime, timezone
 logger = logging.getLogger('discord_bot.database')
 
 class DatabaseManager:
-    def __init__(self, db_path='bot_memory.db'):
-        self.db_path = db_path
+    def __init__(self, db_path=None):
+        if db_path is None:
+            # Check environment variable for Railway/Docker volumes
+            env_path = os.getenv('DATABASE_PATH')
+            if env_path:
+                self.db_path = env_path
+            else:
+                # Get the directory where database.py is located
+                base_dir = os.path.dirname(os.path.abspath(__file__))
+                self.db_path = os.path.join(base_dir, 'bot_memory.db')
+        else:
+            self.db_path = db_path
+            
+        # Ensure the directory for the database exists (crucial for Railway volumes)
+        db_dir = os.path.dirname(os.path.abspath(self.db_path))
+        if db_dir and not os.path.exists(db_dir):
+            os.makedirs(db_dir, exist_ok=True)
+            
         self.init_db()
 
     def init_db(self):
@@ -111,6 +127,8 @@ class DatabaseManager:
                 )
             ''')
             
+            cursor.execute('PRAGMA journal_mode=WAL')
+            cursor.execute('PRAGMA synchronous=NORMAL')
             conn.commit()
             logger.info("Database initialized successfully.")
 
