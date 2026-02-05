@@ -6729,6 +6729,99 @@ async def manual_rotate(ctx):
     rotate_gemini_key()
     await ctx.send(f"🔄 **Manual Rotation**: Switched to key position {current_key_index + 1}.")
 
+@bot.command(name="setrules")
+@commands.has_permissions(administrator=True)
+async def set_rules_command(ctx):
+    """Post and pin the professional server rules. Administrator only."""
+    try:
+        # Delete the command message to keep it clean
+        try:
+            await ctx.message.delete()
+        except:
+            pass
+
+        # Create the main rules embed
+        embed = discord.Embed(
+            title="🛡️ SERVER RULES",
+            description=(
+                "Welcome to the community. To ensure a high-tier creative environment for everyone, "
+                "all members are required to adhere to the following protocols. Failure to comply "
+                "may result in administrative action."
+            ),
+            color=0x00FFB4, # Prime Green
+            timestamp=datetime.now(timezone.utc)
+        )
+
+        embed.add_field(
+            name="🚫 1. ZERO SPAM TOLERANCE",
+            value=(
+                "• No excessive mentions, character spam, or wall-of-text messages.\n"
+                "• Refrain from image or sticker spamming.\n"
+                "• No obnoxious noises or music-bot abuse in voice channels."
+            ),
+            inline=False
+        )
+
+        embed.add_field(
+            name="🔞 2. CONTENT GUIDELINES",
+            value=(
+                "• Strictly no NSFW, gory, or disturbing content. This includes 'meme' gore.\n"
+                "• All media must be safe for work and follow Discord's Terms of Service.\n"
+                "• Nicknames, avatars, and statuses must remain professional and clean."
+            ),
+            inline=False
+        )
+
+        embed.add_field(
+            name="🤝 3. PROFESSIONAL CONDUCT",
+            value=(
+                "• No harassment, hate speech, or targeted toxicity.\n"
+                "• Respect all members and their creative work.\n"
+                "• Mild swearing is permitted if not directed as an insult towards others."
+            ),
+            inline=False
+        )
+
+        embed.add_field(
+            name="📢 4. COMMUNICATIONS",
+            value=(
+                "• Mass mentions (@everyone / @here) are strictly forbidden.\n"
+                "• Keep discussions in their appropriate channels.\n"
+                "• No self-promotion or advertising in general lanes."
+            ),
+            inline=False
+        )
+
+        embed.add_field(
+            name="🛡️ 5. ADMINISTRATIVE AUTHORITY",
+            value=(
+                "• Moderators and Admins reserve the right to edit/delete any content.\n"
+                "• Staff decisions are final. If you have an issue, use the proper appeal channels."
+            ),
+            inline=False
+        )
+
+        footer_text = "PRIME | THIS SERVER IS PROTECTED BY AI"
+        if ctx.guild.icon:
+            embed.set_footer(text=footer_text, icon_url=ctx.guild.icon.url)
+        else:
+            embed.set_footer(text=footer_text)
+        
+        # Send the message
+        rules_msg = await ctx.send(embed=embed)
+        
+        # Pin the message
+        try:
+            await rules_msg.pin()
+            await ctx.send("✅ **Success**: Rules have been posted and pinned.", delete_after=5)
+        except Exception as e:
+            await ctx.send(f"⚠️ **Warning**: Rules posted, but I couldn't pin them (check my permissions).", delete_after=10)
+            logger.error(f"Failed to pin rules: {e}")
+
+    except Exception as e:
+        logger.error(f"Error in setrules command: {e}")
+        await ctx.send(f"❌ **System Error**: Failed to deploy rules protocol. {str(e)}", delete_after=10)
+
 def run_bot():
     """Function to start the bot with the token from environment variables."""
     # Load configuration
