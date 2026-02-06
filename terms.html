@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms of Service // Prime Bot</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Unbounded:wght@900&family=Outfit:wght@100;300;600;900&family=Space+Mono&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --p: #00ffaa;
+            --p-rgb: 0, 255, 170;
+            --s: #bc00ff;
+            --bg: #000;
+            --glass: rgba(255, 255, 255, 0.05);
+            --border: rgba(255, 255, 255, 0.1);
+            --f-h: 'Unbounded', sans-serif;
+            --f-b: 'Outfit', sans-serif;
+            --f-m: 'Space Mono', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            cursor: crosshair;
+        }
+
+        ::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #000;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--p);
+        }
+
+        body {
+            background-color: var(--bg);
+            color: #fff;
+            font-family: var(--f-b);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body.loading {
+            overflow: hidden;
+        }
+
+        .scanlines {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+            opacity: 0.3;
+        }
+
+        .vignette {
+            position: fixed;
+            inset: 0;
+            z-index: 999;
+            background: radial-gradient(circle, transparent 40%, #000 100%);
+            pointer-events: none;
+        }
+
+        .auras {
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            filter: blur(120px);
+        }
+
+        .aura {
+            position: absolute;
+            width: 70vw;
+            height: 70vw;
+            border-radius: 50%;
+            opacity: 0.1;
+            animation: moveAura 20s infinite alternate cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .a-1 {
+            background: var(--s);
+            top: -10%;
+            right: -20%;
+        }
+
+        .a-2 {
+            background: var(--p);
+            bottom: -10%;
+            left: -20%;
+            animation-delay: -5s;
+        }
+
+        @keyframes moveAura {
+            from {
+                transform: translate(-10%, -10%) scale(1);
+            }
+
+            to {
+                transform: translate(10%, 10%) scale(1.2);
+            }
+        }
+
+        nav {
+            position: fixed;
+            top: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 1400px;
+            padding: 1rem 3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 2000;
+            background: rgba(255, 255, 255, 0.02);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 100px;
+        }
+
+        /* --- CYBER LOADER --- */
+        #preloader {
+            position: fixed;
+            inset: 0;
+            background: #000;
+            z-index: 9999999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.8s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+
+        #preloader.fade-out {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transform: scale(1.1);
+            z-index: -1;
+        }
+
+        .loader-hub {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3rem;
+        }
+
+        .cyber-ring {
+            width: 80px;
+            height: 80px;
+            border: 2px solid rgba(var(--p-rgb), 0.1);
+            border-top: 2px solid var(--p);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loader-text {
+            font-family: var(--f-m);
+            font-size: 0.6rem;
+            color: var(--p);
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            animation: blink 1.5s infinite;
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.3;
+            }
+        }
+
+        .logo {
+            font-family: var(--f-h);
+            font-size: 1.5rem;
+            letter-spacing: -2px;
+            text-decoration: none;
+            background: linear-gradient(180deg, #fff 0%, #888 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-transform: lowercase;
+        }
+
+        .back-link {
+            font-family: var(--f-m);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--p);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: 0.3s;
+        }
+
+        .back-link:hover {
+            transform: translateX(-5px);
+            text-shadow: 0 0 10px var(--p);
+        }
+
+        main {
+            max-width: 900px;
+            margin: 12rem auto 10rem;
+            padding: 0 5%;
+            position: relative;
+            z-index: 10;
+        }
+
+        .legal-header {
+            margin-bottom: 5rem;
+            text-align: center;
+        }
+
+        .section-tag {
+            font-family: var(--f-m);
+            color: var(--p);
+            font-size: 0.8rem;
+            margin-bottom: 1rem;
+            display: block;
+            letter-spacing: 5px;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            font-family: var(--f-h);
+            font-size: clamp(3rem, 10vw, 6rem);
+            line-height: 0.9;
+            letter-spacing: -4px;
+            margin-bottom: 2rem;
+            text-transform: uppercase;
+        }
+
+        .last-updated {
+            font-family: var(--f-m);
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        footer {
+            padding: 5rem 5%;
+            border-top: 1px solid var(--border);
+        }
+
+        .f-logo-text {
+            font-family: var(--f-h);
+            font-size: 1.2rem;
+            letter-spacing: -1px;
+            background: linear-gradient(180deg, #fff 0%, #888 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .f-bottom {
+            font-family: var(--f-m);
+            font-size: 0.6rem;
+            color: rgba(255, 255, 255, 0.1);
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            text-align: center;
+        }
+
+        .legal-content {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border);
+            padding: 4rem;
+            backdrop-filter: blur(10px);
+            line-height: 1.8;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .legal-content h2 {
+            font-family: var(--f-h);
+            font-size: 1.8rem;
+            color: #fff;
+            margin: 3rem 0 1.5rem;
+            letter-spacing: -1px;
+            text-transform: uppercase;
+        }
+
+        .legal-content h2:first-child {
+            margin-top: 0;
+        }
+
+        .legal-content p {
+            margin-bottom: 1.5rem;
+        }
+
+        .legal-content ul {
+            margin-bottom: 2rem;
+            list-style: none;
+        }
+
+        .legal-content li {
+            position: relative;
+            padding-left: 1.5rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .legal-content li::before {
+            content: "//";
+            position: absolute;
+            left: 0;
+            color: var(--p);
+            font-family: var(--f-m);
+        }
+
+        /* --- BACK TO TOP --- */
+        .back-to-top {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            width: 60px;
+            height: 60px;
+            background: #000;
+            border: 1px solid var(--p);
+            color: var(--p);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            z-index: 10000;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(30px);
+            transition: all 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+            border-radius: 50%;
+            font-size: 1.2rem;
+            box-shadow: 0 0 20px rgba(var(--p-rgb), 0.1);
+        }
+
+        .back-to-top.active {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .back-to-top:hover {
+            border-color: var(--p);
+            color: var(--p);
+            box-shadow: 0 0 20px rgba(var(--p-rgb), 0.2);
+        }
+
+        @media (max-width: 768px) {
+            nav {
+                padding: 1rem 1.5rem;
+                top: 1rem;
+            }
+
+            .logo {
+                font-size: 1.2rem;
+            }
+
+            .legal-content {
+                padding: 2.5rem 1.5rem;
+            }
+
+            h1 {
+                font-size: 3.5rem;
+            }
+        }
+    </style>
+</head>
+
+<body class="loading">
+    <div id="preloader">
+        <div class="loader-hub">
+            <div class="cyber-ring"></div>
+            <div class="loader-text">loading</div>
+        </div>
+    </div>
+
+    <script>
+        function removeLoader() {
+            var loader = document.getElementById('preloader');
+            if (loader && !loader.classList.contains('fade-out')) {
+                loader.classList.add('fade-out');
+                document.body.classList.remove('loading');
+            }
+        }
+        setTimeout(removeLoader, 3000);
+        window.addEventListener('load', function () {
+            setTimeout(removeLoader, 500);
+        });
+    </script>
+    <div class="back-to-top" id="backToTop" onclick="scrollToTop()" title="Go to top">
+        <i class="fa-solid fa-chevron-up"></i>
+    </div>
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+    <div class="auras">
+        <div class="aura a-1"></div>
+        <div class="aura a-2"></div>
+    </div>
+
+    <nav>
+        <a href="index.html" class="logo">prime<span>bot</span></a>
+        <a href="index.html" class="back-link"><i class="fa-solid fa-arrow-left"></i> back</a>
+    </nav>
+
+    <main>
+        <header class="legal-header">
+            <span class="section-tag">legal stuff</span>
+            <h1>Terms of<br>Service.</h1>
+            <p class="last-updated">Last Updated: February 6, 2026</p>
+        </header>
+
+        <section class="legal-content">
+            <h2>1. Acceptance of Terms</h2>
+            <p>By adding Prime Bot to your Discord server or using any of its features, you agree to be bound by these
+                Terms of Service. If you do not agree to these terms, please remove the bot from your server
+                immediately.</p>
+
+            <h2>2. Usage License</h2>
+            <p>We grant you a non-exclusive, non-transferable, limited license to use Prime Bot for personal or
+                community management purposes within Discord.</p>
+            <ul>
+                <li>You may not attempt to reverse engineer or scrape the bot's code.</li>
+                <li>You may not use the bot for any illegal activities or to violate Discord's Terms of Service.</li>
+                <li>You may not exploit the bot's features (AI, asset search, etc.) for commercial resale.</li>
+            </ul>
+
+            <h2>3. Service Availability</h2>
+            <p>Prime Bot is currently in <strong>EARLY ACCESS</strong>. We reserve the right to modify, suspend, or
+                discontinue any feature at any time without notice. We are not responsible for any data loss or server
+                disruption.</p>
+
+            <h2>4. AI Disclaimers</h2>
+            <p>The AI chat functionality is powered by external models. While we strive for "chill" and "smart"
+                responses, we do not guarantee the accuracy or appropriateness of all AI-generated content. Use at your
+                own risk.</p>
+
+            <h2>5. Limitation of Liability</h2>
+            <p>In no event shall Prime Bot or its creator (BMR) be liable for any damages arising out of the use or
+                inability to use the bot, even if notified of the possibility of such damage.</p>
+
+            <h2>6. Governing Law</h2>
+            <p>These terms are governed by the laws of the jurisdiction where the developer resides, without regard to
+                its conflict of law provisions.</p>
+        </section>
+    </main>
+
+    <footer>
+        <div class="f-logo-text">PRIME // TOX</div>
+        <div class="f-bottom">
+            © RAXSTDIOZ 2026 // ALL RIGHTS RESERVED
+        </div>
+    </footer>
+    <script>
+        function scrollToTop() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
+
+        window.addEventListener('scroll', () => {
+            const btt = document.getElementById('backToTop');
+            if (window.scrollY > 200) {
+                btt.classList.add('active');
+            } else {
+                btt.classList.remove('active');
+            }
+        });
+    </script>
+</body>
+
+</html>

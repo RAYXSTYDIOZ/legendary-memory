@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>prime // playground</title>
+
+    <!-- FONTS -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Unbounded:wght@900&family=Outfit:wght@100;300;600;900&family=Space+Mono&display=swap"
+        rel="stylesheet">
+
+    <!-- ICONS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --p: #00ffaa;
+            --p-rgb: 0, 255, 170;
+            --s: #bc00ff;
+            --bg: #000;
+            --glass: rgba(255, 255, 255, 0.05);
+            --border: rgba(255, 255, 255, 0.1);
+            --f-h: 'Unbounded', sans-serif;
+            --f-b: 'Outfit', sans-serif;
+            --f-m: 'Space Mono', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            cursor: none !important;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: #fff;
+            font-family: var(--f-b);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- OVERLAYS --- */
+        .scanlines {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+            opacity: 0.2;
+        }
+
+        .auras {
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            filter: blur(120px);
+        }
+
+        .aura {
+            position: absolute;
+            width: 50vw;
+            height: 50vw;
+            border-radius: 50%;
+            opacity: 0.15;
+            animation: moveAura 20s infinite alternate cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .a-1 {
+            background: var(--s);
+            top: -10%;
+            right: -10%;
+        }
+
+        .a-2 {
+            background: var(--p);
+            bottom: -10%;
+            left: -10%;
+            animation-delay: -5s;
+        }
+
+        @keyframes moveAura {
+            from {
+                transform: translate(-10%, -10%) scale(1);
+            }
+
+            to {
+                transform: translate(10%, 10%) scale(1.2);
+            }
+        }
+
+        /* --- PLAYGROUND LAYOUT --- */
+        nav {
+            padding: 2rem 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .logo-text {
+            font-family: var(--f-h);
+            font-size: 1.5rem;
+            letter-spacing: -1px;
+            text-decoration: none;
+            color: #fff;
+        }
+
+        .logo-text span {
+            color: var(--p);
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+            position: relative;
+        }
+
+        .console-window {
+            width: 100%;
+            max-width: 1000px;
+            height: 80vh;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 50px 100px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .console-header {
+            padding: 1rem 1.5rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .red {
+            background: #ff5f56;
+        }
+
+        .yellow {
+            background: #ffbd2e;
+        }
+
+        .green {
+            background: #27c93f;
+        }
+
+        .console-title {
+            font-family: var(--f-m);
+            font-size: 0.7rem;
+            letter-spacing: 2px;
+            opacity: 0.5;
+        }
+
+        .console-body {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+            font-family: var(--f-m);
+            font-size: 0.9rem;
+            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        /* Scrollbar for console body */
+        .console-body::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .console-body::-webkit-scrollbar-thumb {
+            background: rgba(var(--p-rgb), 0.3);
+        }
+
+        .msg {
+            display: flex;
+            gap: 15px;
+            animation: msgFade 0.3s ease-out forwards;
+        }
+
+        @keyframes msgFade {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .msg.user .prefix {
+            color: var(--p);
+            font-weight: bold;
+        }
+
+        .msg.bot .prefix {
+            color: #fff;
+            font-weight: bold;
+        }
+
+        .msg.system .content {
+            color: rgba(255, 255, 255, 0.4);
+            font-style: italic;
+            font-size: 0.8rem;
+        }
+
+        .console-input-area {
+            padding: 1.5rem 2rem;
+            background: rgba(255, 255, 255, 0.02);
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .input-prefix {
+            color: var(--p);
+            font-family: var(--f-m);
+            font-weight: bold;
+        }
+
+        input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #fff;
+            font-family: var(--f-m);
+            font-size: 1rem;
+        }
+
+        /* --- CURSOR --- */
+        #eyeCursor {
+            position: fixed;
+            width: 40px;
+            height: 40px;
+            pointer-events: none;
+            z-index: 1000000;
+            mix-blend-mode: difference;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .eye-outer {
+            width: 100%;
+            height: 100%;
+            border: 1px solid rgba(var(--p-rgb), 0.5);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .eye-iris {
+            width: 18px;
+            height: 18px;
+            background: var(--p);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 0 10px var(--p);
+        }
+
+        .eye-pupil {
+            width: 8px;
+            height: 8px;
+            background: #000;
+            border-radius: 50%;
+        }
+
+        .typing-indicator {
+            font-size: 0.8rem;
+            opacity: 0.5;
+            margin-top: -1rem;
+            display: none;
+        }
+
+        .back-btn {
+            font-family: var(--f-m);
+            font-size: 0.7rem;
+            color: #fff;
+            text-decoration: none;
+            border: 1px solid var(--border);
+            padding: 8px 15px;
+            border-radius: 4px;
+            transition: 0.3s;
+        }
+
+        .back-btn:hover {
+            border-color: var(--p);
+            color: var(--p);
+            background: rgba(var(--p-rgb), 0.05);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="scanlines"></div>
+    <div class="auras">
+        <div class="aura a-1"></div>
+        <div class="aura a-2"></div>
+    </div>
+
+    <div id="eyeCursor">
+        <div class="eye-outer">
+            <div class="eye-iris">
+                <div class="eye-pupil"></div>
+            </div>
+        </div>
+    </div>
+
+    <nav>
+        <a href="index.html" class="logo-text">PRIME<span>.</span></a>
+        <a href="index.html" class="back-btn"><i class="fa-solid fa-arrow-left"></i> EXIT PLAYGROUND</a>
+    </nav>
+
+    <main>
+        <div class="console-window">
+            <div class="console-header">
+                <div class="controls">
+                    <div class="dot red"></div>
+                    <div class="dot yellow"></div>
+                    <div class="dot green"></div>
+                </div>
+                <div class="console-title">PRIME_INTERNAL_v2.0 // PLAYGROUND</div>
+                <div style="width: 50px;"></div>
+            </div>
+
+            <div class="console-body" id="consoleBody">
+                <div class="msg system">
+                    <div class="content">Welcome to the PRIME Live Playground.</div>
+                </div>
+                <div class="msg bot">
+                    <div class="prefix">PRIME:</div>
+                    <div class="content">Protocol initialized. I'm ready for your commands. Try !vibe, !roast @user, or
+                        !assets.</div>
+                </div>
+            </div>
+
+            <div class="console-input-area">
+                <div class="input-prefix">USER></div>
+                <input type="text" id="consoleInput" placeholder="Enter command..." autocomplete="off" autofocus>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const consoleBody = document.getElementById('consoleBody');
+        const consoleInput = document.getElementById('consoleInput');
+        const eye = document.getElementById('eyeCursor');
+        const iris = eye.querySelector('.eye-iris');
+
+        // Eye Cursor Logic
+        let lastX = 0, lastY = 0;
+        window.addEventListener('mousemove', (e) => {
+            eye.style.left = e.clientX - 20 + 'px';
+            eye.style.top = e.clientY - 20 + 'px';
+
+            const moveX = (e.clientX - lastX) * 0.4;
+            const moveY = (e.clientY - lastY) * 0.4;
+            iris.style.transform = `translate(${Math.max(-8, Math.min(8, moveX))}px, ${Math.max(-8, Math.min(8, moveY))}px)`;
+
+            lastX = e.clientX;
+            lastY = e.clientY;
+        });
+
+        // Chat Logic
+        function addMessage(sender, content, type = 'msg') {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `${type} ${sender.toLowerCase()}`;
+
+            if (type !== 'system') {
+                msgDiv.innerHTML = `<div class="prefix">${sender.toUpperCase()}:</div><div class="content">${content}</div>`;
+            } else {
+                msgDiv.innerHTML = `<div class="content">${content}</div>`;
+            }
+
+            consoleBody.appendChild(msgDiv);
+            consoleBody.scrollTop = consoleBody.scrollHeight;
+        }
+
+        const responses = {
+            "!vibe": [
+                "the grid is pulsing with elite energy right now.",
+                "keep your focus sharp. the architecture of your server depends on it.",
+                "current vibe: ultra-silver and high-performance.",
+                "relax. i've got the security covered."
+            ],
+            "!motivate": [
+                "the ugly phase of a project is where the skill is built. keep cookin.",
+                "render speeds don't define you. the vision does.",
+                "stop looking for inspiration and start creating it.",
+                "you're one project away from being elite. don't stop now."
+            ],
+            "!assets": [
+                "Found high-tier pack: [4K_Glass_Overlays_v2.zip]",
+                "Accessing library... Elite Light Leaks available at /prime/assets/09",
+                "Retrieving 12 premium SFX files for your latest edit.",
+                "Scanning... Found 5 high-quality PNG textures for the project."
+            ]
+        };
+
+        let chatCount = parseInt(localStorage.getItem('prime_playground_chats') || '0');
+
+        consoleInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && consoleInput.value.trim() !== '') {
+                if (chatCount >= 2) {
+                    addMessage('System', 'ACCESS RESTRICTED: Daily playground limit reached. Add Prime to your server for unlimited access.', 'msg system');
+                    addMessage('Prime', 'i can only talk so much for free. <a href="https://ptb.discord.com/oauth2/authorize?client_id=1466029119275012139" target="_blank" style="color:var(--p); font-weight:bold;">[ADD ME]</a> to keep the flow going.', 'msg bot');
+                    consoleInput.value = '';
+                    return;
+                }
+
+                const cmd = consoleInput.value.trim();
+                addMessage('User', cmd, 'msg user');
+                consoleInput.value = '';
+
+                // Simulate bot thinking
+                setTimeout(() => {
+                    handleCommand(cmd);
+                    chatCount++;
+                    localStorage.setItem('prime_playground_chats', chatCount);
+                }, 600);
+            }
+        });
+
+        function handleCommand(cmd) {
+            const lowerCmd = cmd.toLowerCase();
+            const args = cmd.split(' ');
+
+            if (lowerCmd.startsWith('!vibe')) {
+                const r = responses["!vibe"][Math.floor(Math.random() * responses["!vibe"].length)];
+                addMessage('Prime', r, 'msg bot');
+            } else if (lowerCmd.startsWith('!motivate')) {
+                const r = responses["!motivate"][Math.floor(Math.random() * responses["!motivate"].length)];
+                addMessage('Prime', r, 'msg bot');
+            } else if (lowerCmd.startsWith('!roast')) {
+                const target = args[1] || 'you';
+                const roasts = [
+                    `${target}? i've seen default presets with more personality.`,
+                    `${target}'s work looks like it was rendered on a toaster from 2008.`,
+                    `${target} talks a big game for someone who still follows 'how to center a div' tutorials.`,
+                    `i would roast ${target}, but my ai safety protocols prevent me from bullying the defenseless.`
+                ];
+                addMessage('Prime', roasts[Math.floor(Math.random() * roasts.length)], 'msg bot');
+            } else if (lowerCmd.startsWith('!assets')) {
+                const r = responses["!assets"][Math.floor(Math.random() * responses["!assets"].length)];
+                addMessage('Prime', r, 'msg bot');
+            } else if (lowerCmd.startsWith('!glitch')) {
+                const text = args.slice(1).join(' ') || "PRIME";
+                const glitched = text.split('').map(c => c + (Math.random() > 0.5 ? '̵' : '̶')).join('');
+                addMessage('Prime', `⚡ STYLED TEXT:\n\`\`\`\n${glitched}\n\`\`\``, 'msg bot');
+            } else if (lowerCmd.startsWith('!stack')) {
+                addMessage('Prime', "🦾 VFX PLUGIN STACK:\n1. Sapphire Glow (Radius: 320, Intensity: 1.2)\n2. BCC Film Grain (Opacity: 15%)\n3. Deep Glow (Exposure: 0.8)\n\nOrder: Light -> Texture -> Polish.", 'msg bot');
+            } else if (lowerCmd.startsWith('!aura')) {
+                const target = args[1] || 'USER';
+                addMessage('Prime', `🔮 USER PROFILE: ${target}\n**Current Vibe:** \`ELITE\`\n\n**AI Profile Summary:**\nSubject displays high-tier creative drive and consistent architectural focus.`, 'msg bot');
+            } else if (lowerCmd === '!help') {
+                addMessage('Prime', "Available protocols: !vibe, !roast, !assets, !motivate, !glitch, !stack, !aura, !pulse, !help", 'msg bot');
+            } else if (lowerCmd === '!clear') {
+                consoleBody.innerHTML = '<div class="msg system"><div class="content">Console cleared.</div></div>';
+                chatCount = 0;
+            } else {
+                // Generic AI Chat Simulation
+                const generic = [
+                    "that's an interesting take. tell me more about your vision.",
+                    "i'm focused on the elite architecture of this playground right now.",
+                    "lowkey i see what you're doing. keep that energy.",
+                    "i'm built for this. what else you got?"
+                ];
+                addMessage('Prime', generic[Math.floor(Math.random() * generic.length)], 'msg bot');
+            }
+        }
+    </script>
+</body>
+
+</html>

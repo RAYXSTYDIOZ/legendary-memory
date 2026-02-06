@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>access denied // prime bot</title>
+
+    <!-- FONTS -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Unbounded:wght@900&family=Outfit:wght@100;300;600;900&family=Space+Mono&display=swap"
+        rel="stylesheet">
+
+    <!-- ICONS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --p: #00ffaa;
+            --p-rgb: 0, 255, 170;
+            --bg: #000;
+            --f-h: 'Unbounded', sans-serif;
+            --f-b: 'Outfit', sans-serif;
+            --f-m: 'Space Mono', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            cursor: crosshair;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: #fff;
+            font-family: var(--f-b);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            overflow: hidden;
+        }
+
+        body.loading {
+            overflow: hidden;
+        }
+
+        .scanlines {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+            opacity: 0.3;
+        }
+
+        .container {
+            position: relative;
+            z-index: 10;
+            padding: 2rem;
+        }
+
+        .glitch-text {
+            font-family: var(--f-h);
+            font-size: clamp(3rem, 10vw, 8rem);
+            line-height: 0.9;
+            margin-bottom: 2rem;
+            text-transform: uppercase;
+            position: relative;
+            background: linear-gradient(180deg, #fff 30%, #666 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: glitch 1s infinite;
+        }
+
+        @keyframes glitch {
+            0% {
+                transform: translate(0);
+                text-shadow: -2px 0 var(--p), 2px 0 #ff3c00;
+            }
+
+            20% {
+                transform: translate(-2px, 2px);
+            }
+
+            40% {
+                transform: translate(-2px, -2px);
+                text-shadow: 2px 0 var(--p), -2px 0 #ff3c00;
+            }
+
+            60% {
+                transform: translate(2px, 2px);
+            }
+
+            80% {
+                transform: translate(2px, -2px);
+                text-shadow: -1px 0 var(--p), 1px 0 #ff3c00;
+            }
+
+            100% {
+                transform: translate(0);
+            }
+        }
+
+        .status-tag {
+            font-family: var(--f-m);
+            font-size: 0.8rem;
+            background: rgba(255, 60, 0, 0.1);
+            color: #ff3c00;
+            padding: 8px 16px;
+            border: 1px solid rgba(255, 60, 0, 0.3);
+            display: inline-block;
+            margin-bottom: 3rem;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+
+        p {
+            font-family: var(--f-b);
+            font-size: 1.2rem;
+            color: rgba(255, 255, 255, 0.4);
+            max-width: 500px;
+            margin: 0 auto 4rem;
+            font-weight: 300;
+        }
+
+        .f-logo-wrap {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .f-logo-ring {
+            position: relative;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .f-logo-text {
+            font-family: var(--f-h);
+            font-size: 1rem;
+            letter-spacing: -1px;
+            background: linear-gradient(180deg, #fff 0%, #888 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-family: var(--f-h);
+            font-size: 1.5rem;
+            letter-spacing: -2px;
+            text-decoration: none;
+            transition: 0.3s;
+            text-transform: lowercase;
+            background: linear-gradient(180deg, #fff 0%, #888 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo-wrap {
+            position: relative;
+            width: 45px;
+            height: 45px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        @keyframes rotate {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes logo-shine {
+            from {
+                filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.2));
+            }
+
+            to {
+                filter: drop-shadow(0 0 15px rgba(255, 255, 255, 0.8));
+            }
+        }
+
+        .logo-text {
+            display: flex;
+            align-items: center;
+        }
+
+        .nav-link {
+            font-family: var(--f-m);
+            font-size: 0.65rem;
+            color: #bbb;
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            position: relative;
+            padding: 5px 0;
+        }
+
+        .back-link {
+            font-family: var(--f-m);
+            font-size: 0.7rem;
+            color: var(--p);
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            padding: 1rem 2rem;
+            border: 1px solid var(--p);
+            transition: 0.3s;
+        }
+
+        .back-link:hover {
+            background: var(--p);
+            color: #000;
+            box-shadow: 0 0 30px rgba(var(--p-rgb), 0.4);
+        }
+
+        /* --- BACKGROUND --- */
+        .grid-bg {
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            z-index: 1;
+            perspective: 1000px;
+            transform: rotateX(60deg) translateY(-20%);
+        }
+
+        .auras {
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            filter: blur(120px);
+        }
+
+        .aura {
+            position: absolute;
+            width: 60vw;
+            height: 60vw;
+            border-radius: 50%;
+            opacity: 0.2;
+        }
+
+        .a-1 {
+            background: #ff3c00;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* --- CYBER LOADER --- */
+        #preloader {
+            position: fixed;
+            inset: 0;
+            background: #000;
+            z-index: 9999999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.8s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+
+        #preloader.fade-out {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transform: scale(1.1);
+            z-index: -1;
+        }
+
+        .loader-hub {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3rem;
+        }
+
+        .cyber-ring {
+            width: 60px;
+            height: 60px;
+            border: 2px solid rgba(255, 60, 0, 0.1);
+            border-top: 2px solid #ff3c00;
+            border-radius: 50%;
+            animation: spin 1s linear infinite, glowPulseRed 2s infinite alternate ease-in-out;
+            position: relative;
+        }
+
+        .cyber-ring::after {
+            content: '';
+            position: absolute;
+            inset: 8px;
+            border: 1px solid rgba(255, 60, 0, 0.05);
+            border-bottom: 1px solid #ff3c00;
+            border-radius: 50%;
+            animation: spin 2s linear infinite reverse;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes glowPulseRed {
+            from {
+                box-shadow: 0 0 10px rgba(255, 60, 0, 0.1), inset 0 0 5px rgba(255, 60, 0, 0.05);
+            }
+
+            to {
+                box-shadow: 0 0 30px rgba(255, 60, 0, 0.3), inset 0 0 10px rgba(255, 60, 0, 0.1);
+            }
+        }
+
+        .loader-text {
+            font-family: var(--f-m);
+            font-size: 0.6rem;
+            color: #ff3c00;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            animation: blink 1.5s infinite;
+        }
+    </style>
+</head>
+
+<body class="loading">
+    <div id="preloader">
+        <div class="loader-hub">
+            <div class="cyber-ring"></div>
+            <div class="loader-text">loading</div>
+        </div>
+    </div>
+
+    <script>
+        function removeLoader() {
+            var loader = document.getElementById('preloader');
+            if (loader && !loader.classList.contains('fade-out')) {
+                loader.classList.add('fade-out');
+                document.body.classList.remove('loading');
+            }
+        }
+
+        setTimeout(removeLoader, 4000);
+
+        window.addEventListener('load', function () {
+            setTimeout(removeLoader, 800);
+        });
+    </script>
+    <div class="scanlines"></div>
+    <div class="grid-bg"></div>
+    <nav
+        style="position:fixed; top:10px; left:50%; transform:translateX(-50%); width:90%; padding:1rem 3rem; z-index:10000; display:flex; justify-content:space-between; align-items:center; background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 100px;">
+        <div class="nav-left">
+            <a href="index.html" class="logo">
+                <div class="logo-text">prime<span>bot</span></div>
+            </a>
+        </div>
+        <div class="nav-right">
+            <a href="index.html" class="nav-link"
+                style="color:#fff; text-decoration:none; font-family:var(--f-m); font-size:0.6rem; letter-spacing:2px;">[
+                EXIT ]</a>
+        </div>
+    </nav>
+
+    <div class="auras">
+        <div class="aura a-1"></div>
+    </div>
+
+    <div class="container">
+        <div class="status-tag">System Level: Restricted</div>
+        <h1 class="glitch-text">COMING<br><span>SOON</span></h1>
+        <p>We're still working on the dashboard. Expect it to go live late February or early March.</p>
+        <a href="index.html" class="back-link">[ Return to Safety ]</a>
+    </div>
+
+    <footer>
+        <div class="f-logo-text">RAXSTDIOZ // 2026</div>
+    </footer>
+</body>
+
+</html>

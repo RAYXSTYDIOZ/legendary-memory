@@ -96,3 +96,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     console.log("Prime AI Dashboard Initialized.");
 });
+
+function scrollToTop() {
+    window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+    });
+}
+
+window.addEventListener('scroll', () => {
+    const btt = document.getElementById('backToTop');
+    if (window.scrollY > 200) {
+        btt.classList.add('active');
+    } else {
+        btt.classList.remove('active');
+    }
+});

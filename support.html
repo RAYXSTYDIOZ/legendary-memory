@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en" style="scroll-behavior: smooth;">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>support // prime bot</title>
+
+    <!-- FONTS -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Unbounded:wght@900&family=Outfit:wght@100;300;600;900&family=Space+Mono&display=swap"
+        rel="stylesheet">
+
+    <!-- ICONS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --p: #00ffaa;
+            --p-rgb: 0, 255, 170;
+            --s: #bc00ff;
+            --bg: #000;
+            --border: rgba(255, 255, 255, 0.1);
+            --f-h: 'Unbounded', sans-serif;
+            --f-b: 'Outfit', sans-serif;
+            --f-m: 'Space Mono', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            cursor: crosshair;
+        }
+
+        ::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #000;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--p);
+        }
+
+        body {
+            background-color: var(--bg);
+            color: #fff;
+            font-family: var(--f-b);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body.loading {
+            overflow: hidden;
+        }
+
+        /* --- OVERLAYS --- */
+        .scanlines {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+            opacity: 0.3;
+        }
+
+        .vignette {
+            position: fixed;
+            inset: 0;
+            z-index: 999;
+            background: radial-gradient(circle, transparent 40%, #000 100%);
+            pointer-events: none;
+        }
+
+        /* --- NAV --- */
+        nav {
+            position: fixed;
+            top: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 1400px;
+            padding: 1rem 3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 2000;
+            background: rgba(255, 255, 255, 0.02);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 100px;
+        }
+
+        .nav-center {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 3rem;
+        }
+
+        .nav-link {
+            font-family: var(--f-m);
+            font-size: 0.65rem;
+            color: #bbb;
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            position: relative;
+            padding: 5px 0;
+        }
+
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 1px;
+            background: var(--p);
+            transition: 0.4s;
+        }
+
+        .nav-link:hover {
+            color: #fff;
+        }
+
+        .nav-link:hover::after {
+            width: 100%;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-family: var(--f-h);
+            font-size: 1.5rem;
+            letter-spacing: -2px;
+            text-decoration: none;
+            background: linear-gradient(180deg, #fff 0%, #888 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo-text {
+            display: flex;
+            align-items: center;
+        }
+
+        /* --- SUPPORT CONTENT --- */
+        main {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 10rem 5%;
+            text-align: center;
+        }
+
+        h1 {
+            font-family: var(--f-h);
+            font-size: clamp(3rem, 10vw, 8rem);
+            line-height: 1;
+            letter-spacing: -4px;
+            margin-bottom: 2rem;
+            text-transform: uppercase;
+            background: linear-gradient(180deg, #fff 0%, #666 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .support-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            max-width: 1200px;
+            width: 100%;
+            margin-top: 4rem;
+        }
+
+        .support-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border);
+            padding: 4rem 2rem;
+            transition: 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .support-card:hover {
+            border-color: var(--p);
+            transform: translateY(-10px);
+            background: rgba(var(--p-rgb), 0.02);
+        }
+
+        .support-card i {
+            font-size: 3rem;
+            color: var(--p);
+            margin-bottom: 2rem;
+        }
+
+        .support-card h3 {
+            font-family: var(--f-h);
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            letter-spacing: -1px;
+        }
+
+        .support-card p {
+            color: rgba(255, 255, 255, 0.4);
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+
+        .support-btn {
+            display: inline-block;
+            padding: 1rem 2rem;
+            background: var(--p);
+            color: #000;
+            text-decoration: none;
+            font-family: var(--f-h);
+            font-size: 0.7rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: 0.3s;
+        }
+
+        .support-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(var(--p-rgb), 0.3);
+        }
+
+        /* --- FOOTER --- */
+        footer {
+            padding: 5rem 5%;
+            border-top: 1px solid var(--border);
+        }
+
+        .f-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: var(--f-m);
+            font-size: 0.6rem;
+            color: rgba(255, 255, 255, 0.1);
+            text-transform: uppercase;
+            letter-spacing: 4px;
+        }
+
+        .f-logo-text {
+            font-family: var(--f-h);
+            font-size: 1.2rem;
+            letter-spacing: -1px;
+            background: linear-gradient(180deg, #fff 0%, #888 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* --- AURAS --- */
+        .auras {
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            filter: blur(120px);
+        }
+
+        .aura {
+            position: absolute;
+            width: 60vw;
+            height: 60vw;
+            border-radius: 50%;
+            opacity: 0.1;
+        }
+
+        .a-1 {
+            background: var(--s);
+            top: -10%;
+            right: -10%;
+        }
+
+        .a-2 {
+            background: var(--p);
+            bottom: -10%;
+            left: -10%;
+        }
+
+        /* --- CYBER LOADER --- */
+        #preloader {
+            position: fixed;
+            inset: 0;
+            background: #000;
+            z-index: 9999999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.8s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+
+        #preloader.fade-out {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transform: scale(1.1);
+            z-index: -1;
+        }
+
+        .loader-hub {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3rem;
+        }
+
+        .cyber-ring {
+            width: 60px;
+            height: 60px;
+            border: 2px solid rgba(var(--p-rgb), 0.1);
+            border-top: 2px solid var(--p);
+            border-radius: 50%;
+            animation: spin 1s linear infinite, glowPulse 2s infinite alternate ease-in-out;
+            position: relative;
+        }
+
+        .cyber-ring::after {
+            content: '';
+            position: absolute;
+            inset: 8px;
+            border: 1px solid rgba(var(--p-rgb), 0.05);
+            border-bottom: 1px solid var(--p);
+            border-radius: 50%;
+            animation: spin 2s linear infinite reverse;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes glowPulse {
+            from {
+                box-shadow: 0 0 10px rgba(var(--p-rgb), 0.1), inset 0 0 5px rgba(var(--p-rgb), 0.05);
+            }
+
+            to {
+                box-shadow: 0 0 30px rgba(var(--p-rgb), 0.3), inset 0 0 10px rgba(var(--p-rgb), 0.1);
+            }
+        }
+
+        .loader-text {
+            font-family: var(--f-m);
+            font-size: 0.6rem;
+            color: var(--p);
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            animation: blink 1.5s infinite;
+        }
+    </style>
+</head>
+
+<body class="loading">
+    <div id="preloader">
+        <div class="loader-hub">
+            <div class="cyber-ring"></div>
+            <div class="loader-text">loading</div>
+        </div>
+    </div>
+
+    <script>
+        function removeLoader() {
+            var loader = document.getElementById('preloader');
+            if (loader && !loader.classList.contains('fade-out')) {
+                loader.classList.add('fade-out');
+                document.body.classList.remove('loading');
+            }
+        }
+
+        setTimeout(removeLoader, 4000);
+
+        window.addEventListener('load', function () {
+            setTimeout(removeLoader, 800);
+        });
+    </script>
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+    <div class="auras">
+        <div class="aura a-1"></div>
+        <div class="aura a-2"></div>
+    </div>
+
+    <nav>
+        <div class="nav-left">
+            <a href="index.html" class="logo">
+                <div class="logo-text">prime<span>bot</span></div>
+            </a>
+        </div>
+        <div class="nav-center">
+            <a href="index.html" class="nav-link">Home</a>
+            <a href="index.html#features" class="nav-link">Features</a>
+            <a href="coming-soon.html" class="nav-link">Dashboard</a>
+            <a href="support.html" class="nav-link" style="color:#fff; text-shadow:0 0 10px var(--p)">Support</a>
+        </div>
+        <div class="nav-right">
+            <a href="index.html" class="nav-link" style="letter-spacing: 1px;">[ Back ]</a>
+        </div>
+    </nav>
+
+    <main>
+        <h1>GET IN<br><span>TOUCH</span></h1>
+        <p style="color: rgba(255,255,255,0.4); max-width: 600px; margin-bottom: 4rem;">Need help with Prime? Our
+            specialized support systems are ready to assist you 24/7.</p>
+
+        <div class="support-grid">
+            <div class="support-card">
+                <i class="fa-brands fa-discord"></i>
+                <h3>DISCORD</h3>
+                <p>Join our elite support hub for instant answers and community help.</p>
+                <a href="#" class="support-btn">Join Server</a>
+            </div>
+
+            <div class="support-card">
+                <i class="fa-solid fa-envelope"></i>
+                <h3>EMAIL</h3>
+                <p>For official inquiries and high-tier support requests.</p>
+                <a href="mailto:support@primebot.ai" class="support-btn">Send Email</a>
+            </div>
+
+            <div class="support-card">
+                <i class="fa-solid fa-gauge-high"></i>
+                <h3>DASHBOARD</h3>
+                <p>Manage your server settings even though it's in early access.</p>
+                <a href="coming-soon.html" class="support-btn"
+                    style="background:transparent; color:#fff; border:1px solid #fff">Visit Hub</a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="f-bottom">
+            <div class="f-logo-text">PRIME // SUPPORT</div>
+            <div>© RAXSTDIOZ 2026 // ALL RIGHTS RESERVED</div>
+        </div>
+    </footer>
+</body>
+
+</html>
