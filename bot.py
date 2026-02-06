@@ -174,42 +174,42 @@ def save_yt_cooldowns(cooldowns):
 guild_join_history = {}  # guild_id: [{"user_id": id, "timestamp": time}, ...]
 guild_security_settings = {}  # guild_id: {"min_account_age_days": 7, "raid_alert_threshold": 5}
 
-# Channel/Role Configuration (Obfuscated for Railway build-safety)
-# Role ID Lookups (Obfuscated)
-YOUTUBER_ROLE_ID = get_env_int(["YT", "R", "ID"], 0)
-LEGENDARY_ROLE_ID = get_env_int(["LG", "R", "ID"], 0)
+# Channel/Role Configuration
+# Role ID Lookups
+YOUTUBER_ROLE_ID = get_env_int("YOUTUBER_ROLE_ID", 0)
+LEGENDARY_ROLE_ID = get_env_int("LEGENDARY_ROLE_ID", 0)
 
 # Editing Role Configuration
 # Editing Roles
-AE_ROLE_ID = get_env_int(["AE", "R", "ID"], 0)
-AM_ROLE_ID = get_env_int(["AM", "R", "ID"], 0)
-CAPCUT_ROLE_ID = get_env_int(["CC", "R", "ID"], 0)
-PR_ROLE_ID = get_env_int(["PR", "R", "ID"], 0)
-PS_ROLE_ID = get_env_int(["PS", "R", "ID"], 0)
-OTHER_EDIT_ROLE_ID = get_env_int(["OT", "R", "ID"], 0)
-GIVEAWAY_ROLE_ID = get_env_int(["GV", "R", "ID"], 0)
+AE_ROLE_ID = get_env_int("AE_ROLE_ID", 0)
+AM_ROLE_ID = get_env_int("AM_ROLE_ID", 0)
+CAPCUT_ROLE_ID = get_env_int("CAPCUT_ROLE_ID", 0)
+PR_ROLE_ID = get_env_int("PR_ROLE_ID", 0)
+PS_ROLE_ID = get_env_int("PS_ROLE_ID", 0)
+OTHER_EDIT_ROLE_ID = get_env_int("OTHER_EDIT_ROLE_ID", 0)
+GIVEAWAY_ROLE_ID = get_env_int("GIVEAWAY_ROLE_ID", 0)
 
 # Emoji/Icon Configuration
 # Emojis
-AE_EMOJI_ID = get_env_int(["AE", "EM", "ID"], 0)
-AM_EMOJI_ID = get_env_int(["AM", "EM", "ID"], 0)
-CAPCUT_EMOJI_ID = get_env_int(["CC", "EM", "ID"], 0)
-OTHER_EDIT_EMOJI_ID = get_env_int(["OT", "EM", "ID"], 0)
-YOUTUBER_EMOJI_ID = get_env_int(["YT", "EM", "ID"], 0)
-LEGENDARY_EMOJI_ID = get_env_int(["LG", "EM", "ID"], 0)
+AE_EMOJI_ID = get_env_int("AE_EMOJI_ID", 0)
+AM_EMOJI_ID = get_env_int("AM_EMOJI_ID", 0)
+CAPCUT_EMOJI_ID = get_env_int("CAPCUT_EMOJI_ID", 0)
+OTHER_EDIT_EMOJI_ID = get_env_int("OTHER_EDIT_EMOJI_ID", 0)
+YOUTUBER_EMOJI_ID = get_env_int("YOUTUBER_EMOJI_ID", 0)
+LEGENDARY_EMOJI_ID = get_env_int("LEGENDARY_EMOJI_ID", 0)
 
 # Activity logging channel
 # Logging and Appeals
-LOG_CHANNEL_ID = get_env_str(["L", "G", "C", "I"])
+LOG_CHANNEL_ID = get_env_str("LOG_CHANNEL_ID")
 log_channel = None  
-APPEAL_CHANNEL_ID = get_env_int(["A", "P", "C", "I"], 0)
+APPEAL_CHANNEL_ID = get_env_int("APPEAL_CHANNEL_ID", 0)
 
 # --- VERIFICATION SYSTEM CONFIG ---
 # Verification
-VERIFICATION_CHANNEL_ID = get_env_int(["V", "F", "C", "I"], 0)
-VERIFIED_ROLE_ID = get_env_int(["V", "F", "R", "I"], 0)
-MUTED_ROLE_ID = get_env_int(["M", "T", "R", "I"], 0)
-UNVERIFIED_ROLE_ID = get_env_int(["U", "V", "R", "I"], 0)
+VERIFICATION_CHANNEL_ID = get_env_int("VERIFICATION_CHANNEL_ID", 0)
+VERIFIED_ROLE_ID = get_env_int("VERIFIED_ROLE_ID", 0)
+MUTED_ROLE_ID = get_env_int("MUTED_ROLE_ID", 0)
+UNVERIFIED_ROLE_ID = get_env_int("UNVERIFIED_ROLE_ID", 0)
 VERIFICATION_AGE_THRESHOLD_DAYS = 30
 
 # Active captcha codes storage (user_id: code)
@@ -224,18 +224,18 @@ def save_active_captchas(captchas):
 user_levels = db_manager.get_levels()
 LEVELING_CHANNEL_ID = 1468888240726741119
 
-# Lazily loaded channel settings (Bypasses Railway Scanners)
+# Lazily loaded channel settings
 def get_welcome_chan(): 
-    return get_env_int(["W", "L", "C", "I"], 0)
+    return get_env_int("WELCOME_CHANNEL_ID", 0)
 
 def get_rules_chan(): 
-    return get_env_int(["R", "L", "C", "I"], 0)
+    return get_env_int("RULES_CHANNEL_ID", 0)
 
 def get_role_request_chan():
-    return get_env_int(["R", "R", "C", "I"], 1249245390755205161)
+    return get_env_int("ROLE_REQUEST_CHANNEL_ID", 1249245390755205161)
 
 def get_general_chan(): 
-    return get_env_int(["G", "E", "C", "I"], 1311717154793459764)
+    return get_env_int("GENERAL_CHAT_CHANNEL_ID", 1311717154793459764)
 
 def save_levels(levels_data):
     for uid, data in levels_data.items():
