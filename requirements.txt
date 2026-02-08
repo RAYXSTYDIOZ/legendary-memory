@@ -6,4 +6,8 @@ bing-image-downloader
 python-dotenv
 requests
 psycopg2-binary
-
+fastapi
+uvicorn
+python-multipart
+itsdangerous
+httpx

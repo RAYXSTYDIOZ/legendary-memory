@@ -20,6 +20,10 @@ ENV/
 !portfolios.json
 !warnings.json
 !yt_cooldowns.json
+*.db
+*.db-shm
+*.db-wal
+*.bak
 # Note: In a production environment, you should use a database instead of JSON files.
 # If you want to keep the data between deployments on Railway, 
 # you might want to ignore these and use an external DB.

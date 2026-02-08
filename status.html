@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PRIME | SYSTEM STATUS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Unbounded:wght@900&family=Outfit:wght@100;300;600;900&family=Space+Mono&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --p: #00ffaa;
+            --p-rgb: 0, 255, 170;
+            --s: #bc00ff;
+            --bg: #030303;
+            --f-h: 'Unbounded', sans-serif;
+            --f-b: 'Outfit', sans-serif;
+            --f-m: 'Space Mono', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            cursor: crosshair;
+        }
+
+        body {
+            background: var(--bg);
+            color: #fff;
+            font-family: var(--f-b);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            text-transform: uppercase;
+        }
+
+        /* Scanline Overlay */
+        .scanlines {
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        /* HUD Frame */
+        .hud-frame {
+            position: fixed;
+            inset: 20px;
+            pointer-events: none;
+            border: 1px solid rgba(var(--p-rgb), 0.1);
+            z-index: 999;
+        }
+
+        .hud-corner {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border: 2px solid var(--p);
+        }
+
+        .tl {
+            top: -2px;
+            left: -2px;
+            border-right: 0;
+            border-bottom: 0;
+        }
+
+        .tr {
+            top: -2px;
+            right: -2px;
+            border-left: 0;
+            border-bottom: 0;
+        }
+
+        .bl {
+            bottom: -2px;
+            left: -2px;
+            border-right: 0;
+            border-top: 0;
+        }
+
+        .br {
+            bottom: -2px;
+            right: -2px;
+            border-left: 0;
+            border-top: 0;
+        }
+
+        /* Top Bar */
+        header {
+            padding: 30px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(var(--p-rgb), 0.1);
+        }
+
+        .sys-id {
+            font-family: var(--f-m);
+            font-size: 0.7rem;
+            letter-spacing: 5px;
+            color: var(--p);
+        }
+
+        .uptime-wrap {
+            text-align: right;
+        }
+
+        .uptime-wrap h2 {
+            font-family: var(--f-m);
+            font-size: 1.2rem;
+            color: #fff;
+        }
+
+        /* Main Grid */
+        main {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 350px 1fr 350px;
+            gap: 2px;
+            padding: 2px;
+            background: rgba(var(--p-rgb), 0.05);
+        }
+
+        .panel {
+            background: var(--bg);
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .panel-h {
+            font-family: var(--f-m);
+            font-size: 0.6rem;
+            letter-spacing: 3px;
+            color: rgba(255, 255, 255, 0.3);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .panel-h::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: rgba(var(--p-rgb), 0.1);
+        }
+
+        /* Gauges */
+        .gauge-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        .gauge-item {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .g-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.7rem;
+            letter-spacing: 2px;
+        }
+
+        .g-bar-bg {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            position: relative;
+        }
+
+        .g-bar-fill {
+            height: 100%;
+            background: var(--p);
+            width: 0%;
+            transition: width 1s cubic-bezier(0.19, 1, 0.22, 1);
+            box-shadow: 0 0 10px var(--p);
+        }
+
+        /* World Map Mock */
+        .map-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        .map-svg {
+            width: 80%;
+            opacity: 0.1;
+            filter: drop-shadow(0 0 10px var(--p));
+        }
+
+        .pulse-node {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: var(--p);
+            border-radius: 50%;
+            box-shadow: 0 0 15px var(--p);
+            animation: nodePulse 2s infinite;
+        }
+
+        @keyframes nodePulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(4);
+                opacity: 0;
+            }
+        }
+
+        /* Feed Logs */
+        .feed-logs {
+            flex: 1;
+            font-family: var(--f-m);
+            font-size: 0.65rem;
+            line-height: 2;
+            overflow-y: hidden;
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .log-line {
+            display: flex;
+            gap: 10px;
+        }
+
+        .log-line span:first-child {
+            color: var(--p);
+        }
+
+        /* Spectrogram */
+        .spectrogram-wrap {
+            height: 120px;
+            background: rgba(var(--p-rgb), 0.02);
+            border-top: 1px solid rgba(var(--p-rgb), 0.1);
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        canvas {
+            flex: 1;
+            height: 60px;
+        }
+
+        /* Bot Identity */
+        .bot-id {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logo-prime {
+            font-family: var(--f-h);
+            font-size: 1.2rem;
+            letter-spacing: -2px;
+        }
+
+        .logo-prime span {
+            color: var(--p);
+        }
+
+        @keyframes glitch {
+            0% {
+                transform: translate(0);
+            }
+
+            20% {
+                transform: translate(-2px, 2px);
+            }
+
+            40% {
+                transform: translate(-2px, -2px);
+            }
+
+            60% {
+                transform: translate(2px, 2px);
+            }
+
+            80% {
+                transform: translate(2px, -2px);
+            }
+
+            100% {
+                transform: translate(0);
+            }
+        }
+
+        .glitch-text:hover {
+            animation: glitch 0.2s infinite;
+            color: var(--p);
+        }
+
+        .interference {
+            position: fixed;
+            inset: 0;
+            z-index: 99999999;
+            background: rgba(var(--p-rgb), 0.05);
+            display: none;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body onload="initStatus()">
+    <div class="scanlines"></div>
+    <div class="hud-frame">
+        <div class="hud-corner tl"></div>
+        <div class="hud-corner tr"></div>
+        <div class="hud-corner bl"></div>
+        <div class="hud-corner br"></div>
+    </div>
+
+    <div class="interference" id="interference"></div>
+
+    <header>
+        <div class="bot-id">
+            <div class="logo-prime">PRIME<span>.</span></div>
+            <div class="sys-id">SYSTEM_UPLINK // NOD_01</div>
+        </div>
+        <div class="uptime-wrap">
+            <span class="panel-h" style="margin-bottom: 5px;">SESSION_UPTIME</span>
+            <h2 id="uptimeCounter">00:00:00</h2>
+        </div>
+    </header>
+
+    <main>
+        <!-- Left Panel: Core Vitals -->
+        <section class="panel">
+            <span class="panel-h">CORE_VITALS</span>
+            <div class="gauge-wrap">
+                <div class="gauge-item">
+                    <div class="g-label"><span>NEURAL_LOAD</span><span id="loadVal">42%</span></div>
+                    <div class="g-bar-bg">
+                        <div class="g-bar-fill" id="loadBar" style="width: 42%;"></div>
+                    </div>
+                </div>
+                <div class="gauge-item">
+                    <div class="g-label"><span>COGNITIVE_TEMP</span><span id="tempVal">31°C</span></div>
+                    <div class="g-bar-bg">
+                        <div class="g-bar-fill" id="tempBar" style="width: 31%; --p: #00ffaa;"></div>
+                    </div>
+                </div>
+                <div class="gauge-item">
+                    <div class="g-label"><span>SYNC_STABILITY</span><span id="syncVal">99.9%</span></div>
+                    <div class="g-bar-bg">
+                        <div class="g-bar-fill" id="syncBar" style="width: 99.9%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: auto; font-family: var(--f-m); font-size: 0.6rem; opacity: 0.3;">
+                ENCRYPTION: AES_256_ACTIVE<br>
+                PROTOCOL: PRIME_SENTINEL_V3<br>
+                AUTH_LVL: COMMAND_CENTER
+            </div>
+        </section>
+
+        <!-- Center Panel: Neural Map -->
+        <section class="panel">
+            <span class="panel-h">NEURAL_TRAFFIC_MAP</span>
+            <div class="map-container">
+                <svg class="map-svg" viewBox="0 0 1000 500">
+                    <path fill="currentColor" d="M150,250 Q250,100 400,250 T650,400 T850,250" stroke="var(--p)"
+                        stroke-width="0.5" fill="none" opacity="0.3"></path>
+                    <g opacity="0.1">
+                        <circle cx="200" cy="200" r="2"></circle>
+                        <circle cx="500" cy="300" r="2"></circle>
+                        <circle cx="800" cy="150" r="2"></circle>
+                        <circle cx="400" cy="400" r="2"></circle>
+                    </g>
+                </svg>
+                <div class="pulse-node" style="top: 30%; left: 20%;"></div>
+                <div class="pulse-node" style="top: 60%; left: 45%; animation-delay: 0.5s;"></div>
+                <div class="pulse-node" style="top: 40%; left: 75%; animation-delay: 1.2s;"></div>
+            </div>
+        </section>
+
+        <!-- Right Panel: Security Feed -->
+        <section class="panel">
+            <span class="panel-h">CMD_PROTOCOL_LOGS</span>
+            <div class="feed-logs" id="logFeed">
+                <!-- Logs injected here -->
+            </div>
+        </section>
+    </main>
+
+    <footer class="spectrogram-wrap">
+        <div style="font-family: var(--f-m); font-size: 0.6rem; min-width: 120px;">
+            LATENCY_STREAM<br>
+            <span id="latencyVal" style="color: var(--p); font-size: 1.2rem;">24ms</span>
+        </div>
+        <canvas id="spectrogram"></canvas>
+    </footer>
+
+    <script>
+        const logs = [
+            "INITIALIZING NEURAL LINK...",
+            "HANDSHAKE SUCCESSFUL.",
+            "DATABASE_UPLINK: ACTIVE",
+            "SCANNING GUILD_ID: 1466029...",
+            "USER_AUTH: Rayan // RECOGNIZED",
+            "MOD_SCAN: 0 THREATS DETECTED",
+            "ASSET_CACHE: SYNCHRONIZED",
+            "AI_CORE: IDLE_VIBE_MODE",
+            "MEMORY_BANK: 1042_RECORDS",
+            "SYSTEM_TEMP: NOMINAL",
+            "WATCHDOG: ARMED",
+            "PING: 0.2ms INTERNAL"
+        ];
+
+        let startTime = Date.now();
+
+        function initStatus() {
+            // Log Injection (keep rotating mock logs for aesthetic but add real ones if needed)
+            const feed = document.getElementById('logFeed');
+            let logIdx = 0;
+            setInterval(() => {
+                const line = document.createElement('div');
+                line.className = 'log-line';
+                const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                line.innerHTML = `<span>[${timeStr}]</span> <span>${logs[logIdx % logs.length]}</span>`;
+                feed.prepend(line);
+                if (feed.childNodes.length > 25) feed.lastChild.remove();
+                logIdx++;
+            }, 3000);
+
+            // Spectrogram Canvas
+            const canvas = document.getElementById('spectrogram');
+            const ctx = canvas.getContext('2d');
+            let offset = 0;
+
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.strokeStyle = '#00ffaa';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                for (let i = 0; i < canvas.width; i++) {
+                    const y = (canvas.height / 2) + Math.sin((i + offset) * 0.05) * 10 + Math.sin((i + offset) * 0.1) * 5;
+                    if (i === 0) ctx.moveTo(i, y);
+                    else ctx.lineTo(i, y);
+                }
+                ctx.stroke();
+                offset += 2;
+                requestAnimationFrame(draw);
+            }
+            draw();
+
+            // Initial fetch
+            fetchStats();
+            // Refresh every 3 seconds for "Real-time" feel
+            setInterval(fetchStats, 3000);
+        }
+
+        async function fetchStats() {
+            try {
+                const startFetch = Date.now();
+                const res = await fetch('/api/stats');
+                const data = await res.json();
+                const latency = Date.now() - startFetch;
+
+                // Update Uptime
+                const totalSeconds = data.uptime_seconds;
+                const h = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+                const m = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+                const s = (totalSeconds % 60).toString().padStart(2, '0');
+                document.getElementById('uptimeCounter').innerText = `${h}:${m}:${s}`;
+
+                // Update Vitals
+                document.getElementById('loadBar').style.width = data.cpu_load + '%';
+                document.getElementById('loadVal').innerText = data.cpu_load + '%';
+
+                document.getElementById('tempBar').style.width = data.ram_usage + '%';
+                document.getElementById('tempVal').innerText = data.ram_usage + '%';
+                // Change label to RAM usage since that's what we're sending
+                document.querySelector('.gauge-item:nth-child(2) .g-label span').innerText = "MEMORY_LOAD";
+
+                document.getElementById('latencyVal').innerText = latency + 'ms';
+
+                // Add a "Real-time" log when data updates
+                if (Math.random() > 0.7) {
+                    const feed = document.getElementById('logFeed');
+                    const line = document.createElement('div');
+                    line.className = 'log-line';
+                    line.style.borderLeft = "2px solid var(--p)";
+                    line.style.paddingLeft = "5px";
+                    line.innerHTML = `<span>[SYSTEM]</span> <span style="color:#fff">HEARTBEAT_ACK // LATENCY: ${latency}ms</span>`;
+                    feed.prepend(line);
+                }
+
+            } catch (e) {
+                console.warn("API Offline", e);
+                document.getElementById('uptimeCounter').innerText = "OFFLINE";
+                document.getElementById('uptimeCounter').style.color = "#ff3c00";
+            }
+        }
+
+        // --- SECURITY BLOCKING ---
+        window.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            showInterference();
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) || (e.ctrlKey && e.key === 'u')) {
+                e.preventDefault();
+                showInterference();
+                return false;
+            }
+        });
+
+        function showInterference() {
+            const inf = document.getElementById('interference');
+            if (inf) {
+                inf.style.display = 'block';
+                setTimeout(() => inf.style.display = 'none', 200);
+            }
+        }
+    </script>
+</body>
+
+</html>

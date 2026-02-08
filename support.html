@@ -288,8 +288,11 @@
         }
 
         .support-btn {
-            display: inline-block;
-            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 1.1rem 2.2rem;
             background: var(--p);
             color: #000;
             text-decoration: none;
@@ -299,11 +302,13 @@
             text-transform: uppercase;
             letter-spacing: 2px;
             transition: 0.3s;
+            border-radius: 4px;
         }
 
         .support-btn:hover {
-            transform: scale(1.05);
-            box-shadow: 0 0 30px rgba(var(--p-rgb), 0.3);
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(var(--p-rgb), 0.3);
+            background: #fff;
         }
 
         /* --- FOOTER --- */
@@ -460,6 +465,15 @@
             letter-spacing: 5px;
             animation: blink 1.5s infinite;
         }
+
+        .interference {
+            position: fixed;
+            inset: 0;
+            z-index: 99999999;
+            background: rgba(var(--p-rgb), 0.05);
+            display: none;
+            pointer-events: none;
+        }
     </style>
 </head>
 
@@ -470,6 +484,7 @@
             <div class="loader-text">loading</div>
         </div>
     </div>
+    <div class="interference" id="interference"></div>
 
     <script>
         function removeLoader() {
@@ -533,22 +548,31 @@
                 <i class="fa-brands fa-discord"></i>
                 <h3 data-i18n="support-card1-h">DISCORD</h3>
                 <p data-i18n="support-card1-p">Join our elite support hub for instant answers and community help.</p>
-                <a href="#" class="support-btn" data-i18n="support-card1-btn">Join Server</a>
+                <a href="#" class="support-btn">
+                    <i class="fa-brands fa-discord"></i>
+                    <span data-i18n="support-card1-btn">Join Server</span>
+                </a>
             </div>
 
             <div class="support-card">
                 <i class="fa-solid fa-envelope"></i>
                 <h3 data-i18n="support-card2-h">EMAIL</h3>
                 <p data-i18n="support-card2-p">For official inquiries and high-tier support requests.</p>
-                <a href="mailto:support@primebot.ai" class="support-btn" data-i18n="support-card2-btn">Send Email</a>
+                <a href="mailto:support@primebot.ai" class="support-btn">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    <span data-i18n="support-card2-btn">Send Email</span>
+                </a>
             </div>
 
             <div class="support-card">
                 <i class="fa-solid fa-gauge-high"></i>
                 <h3 data-i18n="support-card3-h">DASHBOARD</h3>
                 <p data-i18n="support-card3-p">Manage your server settings even though it's in early access.</p>
-                <a href="coming-soon.html" class="support-btn" data-i18n="support-card3-btn"
-                    style="background:transparent; color:#fff; border:1px solid #fff">Visit Hub</a>
+                <a href="coming-soon.html" class="support-btn"
+                    style="background:transparent; color:#fff; border:1px solid #fff">
+                    <i class="fa-solid fa-compass"></i>
+                    <span data-i18n="support-card3-btn">Visit Hub</span>
+                </a>
             </div>
         </div>
     </main>
@@ -701,6 +725,27 @@
                 if (ls && ls.classList.contains('open')) {
                     ls.classList.remove('open');
                 }
+            }
+        }
+        // --- SECURITY BLOCKING ---
+        window.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            showInterference();
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) || (e.ctrlKey && e.key === 'u')) {
+                e.preventDefault();
+                showInterference();
+                return false;
+            }
+        });
+
+        function showInterference() {
+            const inf = document.getElementById('interference');
+            if (inf) {
+                inf.style.display = 'block';
+                setTimeout(() => inf.style.display = 'none', 200);
             }
         }
     </script>

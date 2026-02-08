@@ -8,6 +8,15 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger('discord_bot.database')
 
+class CursorContext:
+    def __init__(self, cursor):
+        self.cursor = cursor
+    def __enter__(self):
+        return self.cursor
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if hasattr(self.cursor, 'close'):
+            self.cursor.close()
+
 class DatabaseManager:
     def __init__(self, db_path=None):
         self.db_url = os.getenv('DATABASE_URL')
@@ -37,6 +46,9 @@ class DatabaseManager:
             logger.info(f"Using SQLite database at {self.db_path}")
             
         self.init_db()
+
+    def get_cursor(self, conn):
+        return CursorContext(conn.cursor())
 
     def get_connection(self):
         if self.is_postgres:
@@ -170,7 +182,7 @@ class DatabaseManager:
         p = self.get_placeholder()
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     cursor.execute(
                         f'INSERT INTO conversation_history (user_id, role, content) VALUES ({p}, {p}, {p})',
                         (user_id, role, content)
@@ -183,7 +195,7 @@ class DatabaseManager:
         p = self.get_placeholder()
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     cursor.execute(
                         f'SELECT role, content FROM conversation_history WHERE user_id = {p} ORDER BY timestamp DESC LIMIT {p}',
                         (user_id, limit)
@@ -199,7 +211,7 @@ class DatabaseManager:
         p = self.get_placeholder()
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     cursor.execute(
                         f'SELECT profile_summary, vibe, interaction_count FROM user_memory WHERE user_id = {p}',
                         (user_id,)
@@ -216,7 +228,7 @@ class DatabaseManager:
         p = self.get_placeholder()
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     cursor.execute(f'SELECT interaction_count FROM user_memory WHERE user_id = {p}', (user_id,))
                     row = cursor.fetchone()
                     
@@ -252,7 +264,7 @@ class DatabaseManager:
     def get_levels(self):
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     cursor.execute('SELECT user_id, xp, level FROM user_levels')
                     return {row[0]: {"xp": row[1], "level": row[2]} for row in cursor.fetchall()}
         except Exception as e:
@@ -262,7 +274,7 @@ class DatabaseManager:
         p = self.get_placeholder()
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     if self.is_postgres:
                         cursor.execute(
                             'INSERT INTO user_levels (user_id, xp, level) VALUES (%s, %s, %s) ON CONFLICT (user_id) DO UPDATE SET xp = EXCLUDED.xp, level = EXCLUDED.level',
@@ -281,7 +293,7 @@ class DatabaseManager:
     def get_warnings(self):
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     cursor.execute('SELECT user_id, count, history FROM user_warnings')
                     return {str(row[0]): {"count": row[1], "history": json.loads(row[2])} for row in cursor.fetchall()}
         except Exception as e:
@@ -291,7 +303,7 @@ class DatabaseManager:
         p = self.get_placeholder()
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     if self.is_postgres:
                         cursor.execute(
                             'INSERT INTO user_warnings (user_id, count, history) VALUES (%s, %s, %s) ON CONFLICT (user_id) DO UPDATE SET count = EXCLUDED.count, history = EXCLUDED.history',
@@ -310,7 +322,7 @@ class DatabaseManager:
     def get_yt_cooldowns(self):
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     cursor.execute('SELECT user_id, expiry FROM yt_cooldowns')
                     return {str(row[0]): row[1] for row in cursor.fetchall()}
         except Exception as e:
@@ -320,7 +332,7 @@ class DatabaseManager:
         p = self.get_placeholder()
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     if self.is_postgres:
                         cursor.execute(
                             'INSERT INTO yt_cooldowns (user_id, expiry) VALUES (%s, %s) ON CONFLICT (user_id) DO UPDATE SET expiry = EXCLUDED.expiry',
@@ -339,7 +351,7 @@ class DatabaseManager:
     def get_guild_inviters(self):
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     cursor.execute('SELECT guild_id, user_id FROM guild_inviters')
                     return {row[0]: row[1] for row in cursor.fetchall()}
         except Exception as e:
@@ -349,7 +361,7 @@ class DatabaseManager:
         p = self.get_placeholder()
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     if self.is_postgres:
                         cursor.execute(
                             'INSERT INTO guild_inviters (guild_id, user_id) VALUES (%s, %s) ON CONFLICT (guild_id) DO UPDATE SET user_id = EXCLUDED.user_id',
@@ -368,7 +380,7 @@ class DatabaseManager:
         p = self.get_placeholder()
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     cursor.execute(f'DELETE FROM guild_inviters WHERE guild_id = {p}', (str(guild_id),))
                 conn.commit()
         except Exception as e:
@@ -378,7 +390,7 @@ class DatabaseManager:
     def get_portfolios(self):
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     cursor.execute('SELECT user_id, portfolio_data FROM user_portfolios')
                     return {row[0]: json.loads(row[1]) for row in cursor.fetchall()}
         except Exception as e:
@@ -388,7 +400,7 @@ class DatabaseManager:
         p = self.get_placeholder()
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     if self.is_postgres:
                         cursor.execute(
                             'INSERT INTO user_portfolios (user_id, portfolio_data) VALUES (%s, %s) ON CONFLICT (user_id) DO UPDATE SET portfolio_data = EXCLUDED.portfolio_data',
@@ -407,7 +419,7 @@ class DatabaseManager:
     def get_active_captchas(self):
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     cursor.execute('SELECT user_id, code FROM active_captchas')
                     return {row[0]: row[1] for row in cursor.fetchall()}
         except Exception as e:
@@ -417,7 +429,7 @@ class DatabaseManager:
         p = self.get_placeholder()
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     if self.is_postgres:
                         cursor.execute(
                             'INSERT INTO active_captchas (user_id, code) VALUES (%s, %s) ON CONFLICT (user_id) DO UPDATE SET code = EXCLUDED.code, timestamp = CURRENT_TIMESTAMP',
@@ -436,7 +448,7 @@ class DatabaseManager:
         p = self.get_placeholder()
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     cursor.execute(f'DELETE FROM active_captchas WHERE user_id = {p}', (int(user_id),))
                 conn.commit()
         except Exception as e:
@@ -446,7 +458,7 @@ class DatabaseManager:
     def get_all_reminders(self):
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     cursor.execute('SELECT user_id, reminder_text, delay, timestamp FROM user_reminders')
                     return [{"user_id": row[0], "text": row[1], "delay": row[2], "timestamp": row[3]} for row in cursor.fetchall()]
         except Exception as e:
@@ -456,7 +468,7 @@ class DatabaseManager:
         p = self.get_placeholder()
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     cursor.execute(
                         f'INSERT INTO user_reminders (user_id, reminder_text, delay) VALUES ({p}, {p}, {p})',
                         (int(user_id), text, delay)
@@ -469,7 +481,7 @@ class DatabaseManager:
         p = self.get_placeholder()
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     cursor.execute(f'DELETE FROM user_reminders WHERE user_id = {p} AND reminder_text = {p}', (int(user_id), text))
                 conn.commit()
         except Exception as e:
@@ -480,7 +492,7 @@ class DatabaseManager:
         p = self.get_placeholder()
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     cursor.execute(f'SELECT note_text FROM user_notes WHERE user_id = {p} ORDER BY timestamp DESC', (int(user_id),))
                     return [row[0] for row in cursor.fetchall()]
         except Exception as e:
@@ -490,7 +502,7 @@ class DatabaseManager:
         p = self.get_placeholder()
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     cursor.execute(
                         f'INSERT INTO user_notes (user_id, note_text) VALUES ({p}, {p})',
                         (int(user_id), text)
@@ -503,7 +515,7 @@ class DatabaseManager:
         p = self.get_placeholder()
         try:
             with self.get_connection() as conn:
-                with conn.cursor() as cursor:
+                with self.get_cursor(conn) as cursor:
                     cursor.execute(f'DELETE FROM user_notes WHERE user_id = {p}', (int(user_id),))
                 conn.commit()
         except Exception as e:

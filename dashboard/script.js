@@ -1,102 +1,100 @@
-// Prime AI Dashboard Interactivity
-
-document.addEventListener('DOMContentLoaded', () => {
-    // 1. Simulate dynamic stats updates
-    const statCards = document.querySelectorAll('.stat-info h3');
-
-    function animateValue(obj, start, end, duration) {
-        let startTimestamp = null;
-        const step = (timestamp) => {
-            if (!startTimestamp) startTimestamp = timestamp;
-            const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-            const val = Math.floor(progress * (end - start) + start);
-            obj.innerHTML = val.toLocaleString() + (obj.innerHTML.includes('k') ? 'k' : '');
-            if (progress < 1) {
-                window.requestAnimationFrame(step);
+document.addEventListener('DOMContentLoaded', async () => {
+    // Check Auth Status
+    try {
+        const response = await fetch('/api/me');
+        if (response.ok) {
+            const data = await response.json();
+            if (data.authenticated) {
+                initializeDashboard(data);
+                document.body.classList.remove('auth-pending');
             }
-        };
-        window.requestAnimationFrame(step);
-    }
-
-    // Small delay before pulse
-    setTimeout(() => {
-        // Just a subtle flicker effect for data
-        statCards.forEach((card, index) => {
-            const currentVal = parseInt(card.innerText.replace(/[^0-9]/g, ''));
-            // simulate a small increase randomly
-            const increase = Math.floor(Math.random() * 5) + 1;
-            // animateValue(card, currentVal, currentVal + increase, 2000);
-        });
-    }, 2000);
-
-    // 2. Search bar focus effect
-    const searchBar = document.querySelector('.search-bar');
-    const searchInput = document.querySelector('.search-bar input');
-
-    searchInput.addEventListener('focus', () => {
-        searchBar.style.borderColor = 'var(--p)';
-        searchBar.style.boxShadow = '0 0 15px rgba(0, 255, 170, 0.1)';
-    });
-
-    searchInput.addEventListener('blur', () => {
-        searchBar.style.borderColor = 'var(--border)';
-        searchBar.style.boxShadow = 'none';
-    });
-
-    // 3. Simple log addition simulation
-    const logList = document.querySelector('.log-list');
-    const activities = [
-        "Updated user memory for @BMR.",
-        "Detected 3 potential spam messages in 'Creators Heaven'.",
-        "Successfully resumed 2 pending reminders.",
-        "Gemini response generated for !ask command in DM.",
-        "Captcha solved correctly by @Newbie_Edits."
-    ];
-
-    function addRandomLog() {
-        const activity = activities[Math.floor(Math.random() * activities.length)];
-        const logItem = document.createElement('div');
-        logItem.className = 'log-item';
-        logItem.style.opacity = '0';
-        logItem.style.transform = 'translateX(-20px)';
-        logItem.style.transition = '0.5s';
-
-        logItem.innerHTML = `
-            <div class="log-time">Just now</div>
-            <div class="log-content">
-                <strong>System:</strong> ${activity}
-            </div>
-        `;
-
-        logList.insertBefore(logItem, logList.firstChild);
-
-        // Trigger animation
-        setTimeout(() => {
-            logItem.style.opacity = '1';
-            logItem.style.transform = 'translateX(0)';
-        }, 100);
-
-        // Remove last item if too many
-        if (logList.children.length > 8) {
-            logList.lastElementChild.remove();
         }
+    } catch (error) {
+        console.error('Auth check failed:', error);
     }
 
-    // Add a new log every 15-30 seconds
-    setInterval(addRandomLog, Math.random() * 15000 + 15000);
-
-    // 4. Hover effect for Sidebar Nav
-    const navItems = document.querySelectorAll('.nav-item');
-    navItems.forEach(item => {
-        item.addEventListener('click', (e) => {
-            navItems.forEach(i => i.classList.remove('active'));
-            item.classList.add('active');
-        });
-    });
-
-    console.log("Prime AI Dashboard Initialized.");
+    // Load dynamic stats if authenticated
+    if (!document.body.classList.contains('auth-pending')) {
+        loadStats();
+    }
 });
 
+function initializeDashboard(data) {
+    const user = data.discord;
+    const internal = data.internal;
+    const guilds = data.guilds || [];
+
+    // Update Sidebar User Pill
+    const avatarImg = user.avatar
+        ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`
+        : null;
+
+    const userPill = document.querySelector('.user-pill');
+    if (userPill) {
+        const avatarDiv = userPill.querySelector('.avatar');
+        if (avatarImg) {
+            avatarDiv.innerHTML = `<img src="${avatarImg}" style="width:100%; height:100%; border-radius:50%;">`;
+        } else {
+            avatarDiv.textContent = user.username.charAt(0).toUpperCase();
+        }
+        userPill.querySelector('.user-name').textContent = user.username;
+        userPill.querySelector('.user-role').textContent = internal.levels.level >= 10 ? 'Elite Member' : 'System User';
+    }
+
+    // Update Welcome Title
+    const welcomeTitle = document.querySelector('.welcome-text h2 span');
+    if (welcomeTitle) {
+        welcomeTitle.textContent = user.username;
+    }
+
+    const welcomeDesc = document.querySelector('.welcome-text p');
+    if (welcomeDesc) {
+        welcomeDesc.textContent = `Prime AI is currently connected to ${guilds.length} of your servers.`;
+    }
+
+    // Populate Guilds List in Activity Feed area (or dedicated section)
+    const logList = document.querySelector('.log-list');
+    if (logList && guilds.length > 0) {
+        logList.innerHTML = '<h3>Your Connected Servers</h3>';
+        guilds.slice(0, 8).forEach(guild => {
+            const iconUrl = guild.icon
+                ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png`
+                : 'https://cdn.discordapp.com/embed/avatars/0.png';
+
+            const guildItem = document.createElement('div');
+            guildItem.className = 'log-item';
+            guildItem.innerHTML = `
+                <div class="log-time"><img src="${iconUrl}" style="width:30px; border-radius:8px;"></div>
+                <div class="log-content">
+                    <strong>${guild.name}</strong><br>
+                    <span style="font-size:0.8rem; opacity:0.6;">${guild.permissions_new ? 'Administrator' : 'Member'}</span>
+                </div>
+            `;
+            logList.appendChild(guildItem);
+        });
+    }
+}
+
+async function loadStats() {
+    try {
+        const response = await fetch('/api/stats');
+        const stats = await response.json();
+
+        // Update Stats Cards
+        const totalUsersEl = document.querySelectorAll('.stat-info h3')[0];
+        if (totalUsersEl) totalUsersEl.textContent = stats.total_users.toLocaleString();
+
+        const statusLabel = document.querySelector('.status-indicator span');
+        if (statusLabel) statusLabel.textContent = `SYSTEM ${stats.system_status}`;
+
+        const uptimeVal = document.querySelector('.m-val');
+        if (uptimeVal) uptimeVal.textContent = '99.9%';
+    } catch (error) {
+        console.warn('Failed to load stats');
+    }
+}
+
+// Back to Top Functionality
 function scrollToTop() {
     window.scrollTo({
         top: 0,
@@ -106,7 +104,7 @@ function scrollToTop() {
 
 window.addEventListener('scroll', () => {
     const btt = document.getElementById('backToTop');
-    if (window.scrollY > 200) {
+    if (window.scrollY > 300) {
         btt.classList.add('active');
     } else {
         btt.classList.remove('active');

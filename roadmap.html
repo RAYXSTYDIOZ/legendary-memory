@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en" style="scroll-behavior: smooth;">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>THE MANIFEST // ROADMAP</title>
+
+    <!-- FONTS -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Unbounded:wght@900&family=Outfit:wght@100;300;600;900&family=Space+Mono&display=swap"
+        rel="stylesheet">
+
+    <!-- ICONS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --p: #00ffaa;
+            --p-rgb: 0, 255, 170;
+            --s: #bc00ff;
+            --bg: #000;
+            --glass: rgba(255, 255, 255, 0.05);
+            --border: rgba(255, 255, 255, 0.1);
+            --f-h: 'Unbounded', sans-serif;
+            --f-b: 'Outfit', sans-serif;
+            --f-m: 'Space Mono', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            cursor: none !important;
+        }
+
+        ::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #000;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--p);
+        }
+
+        body {
+            background-color: var(--bg);
+            color: #fff;
+            font-family: var(--f-b);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* --- GLOBAL OVERLAYS --- */
+        .scanlines {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+            background-size: 100% 2px;
+            pointer-events: none;
+            opacity: 0.3;
+        }
+
+        .vignette {
+            position: fixed;
+            inset: 0;
+            z-index: 999;
+            background: radial-gradient(circle, transparent 40%, #000 100%);
+            pointer-events: none;
+        }
+
+        .auras {
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            filter: blur(120px);
+        }
+
+        .aura {
+            position: absolute;
+            width: 70vw;
+            height: 70vw;
+            border-radius: 50%;
+            opacity: 0.15;
+            animation: moveAura 20s infinite alternate cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .a-1 {
+            background: var(--s);
+            top: -10%;
+            right: -10%;
+        }
+
+        .a-2 {
+            background: var(--p);
+            bottom: -10%;
+            left: -10%;
+            animation-delay: -5s;
+        }
+
+        @keyframes moveAura {
+            0% {
+                transform: translate(-10%, -10%) scale(1);
+            }
+
+            100% {
+                transform: translate(10%, 10%) scale(1.2);
+            }
+        }
+
+        /* --- CURSOR --- */
+        #eyeCursor {
+            position: fixed;
+            width: 40px;
+            height: 40px;
+            pointer-events: none;
+            z-index: 9999999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .eye-outer {
+            width: 100%;
+            height: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            backdrop-filter: blur(5px);
+            transition: 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .eye-dot {
+            width: 4px;
+            height: 4px;
+            background: var(--p);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--p);
+        }
+
+        /* --- NAV --- */
+        nav {
+            position: fixed;
+            top: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 1400px;
+            padding: 1rem 3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 2000;
+            background: rgba(255, 255, 255, 0.02);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 100px;
+        }
+
+        .nav-center {
+            display: flex;
+            gap: 3rem;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .nav-link {
+            font-family: var(--f-m);
+            font-size: 0.65rem;
+            color: #aaa;
+            text-decoration: none;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            transition: 0.3s;
+        }
+
+        .nav-link:hover,
+        .nav-link.active {
+            color: var(--p);
+            text-shadow: 0 0 10px rgba(var(--p-rgb), 0.5);
+        }
+
+        .logo {
+            font-family: var(--f-h);
+            font-size: 1.2rem;
+            text-decoration: none;
+            color: #fff;
+            letter-spacing: -1px;
+        }
+
+        .logo span {
+            color: var(--p);
+        }
+
+        /* --- HERO --- */
+        .hero {
+            height: 80vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 0 5%;
+        }
+
+        .section-tag {
+            font-family: var(--f-m);
+            color: var(--p);
+            font-size: 0.8rem;
+            letter-spacing: 5px;
+            text-transform: uppercase;
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            font-family: var(--f-h);
+            font-size: clamp(3rem, 10vw, 8rem);
+            line-height: 0.9;
+            letter-spacing: -2px;
+            text-transform: uppercase;
+        }
+
+        /* --- ROADMAP FLOW --- */
+        .roadmap-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 5rem 5% 15rem;
+            position: relative;
+        }
+
+        .roadmap-container::before {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transform: translateX(-50%);
+        }
+
+        .step-wrapper {
+            margin-bottom: 10rem;
+            display: flex;
+            justify-content: center;
+            position: relative;
+        }
+
+        .step-card {
+            width: 45%;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 3rem;
+            position: relative;
+            backdrop-filter: blur(10px);
+            transition: 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+
+        .step-card:hover {
+            border-color: var(--p);
+            transform: translateY(-10px);
+            background: rgba(var(--p-rgb), 0.05);
+        }
+
+        .step-wrapper:nth-child(even) {
+            justify-content: flex-end;
+        }
+
+        .step-wrapper:nth-child(odd) {
+            justify-content: flex-start;
+        }
+
+        .step-connector {
+            position: absolute;
+            left: 50%;
+            top: 2rem;
+            width: 20px;
+            height: 20px;
+            background: #000;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+        }
+
+        .step-card.active .step-num {
+            color: var(--p);
+        }
+
+        .step-card.active .step-connector {
+            border-color: var(--p);
+            box-shadow: 0 0 15px var(--p);
+            background: var(--p);
+        }
+
+        .step-num {
+            font-family: var(--f-h);
+            font-size: 1.5rem;
+            color: rgba(255, 255, 255, 0.1);
+            margin-bottom: 1rem;
+            display: block;
+        }
+
+        .status-tag {
+            font-family: var(--f-m);
+            font-size: 0.6rem;
+            color: var(--p);
+            background: rgba(var(--p-rgb), 0.1);
+            padding: 4px 12px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-bottom: 2rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .step-card h3 {
+            font-family: var(--f-h);
+            font-size: 2.2rem;
+            margin-bottom: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: -1px;
+        }
+
+        .step-card p {
+            color: rgba(255, 255, 255, 0.4);
+            line-height: 1.6;
+            font-size: 1rem;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.1);
+            margin-top: 3rem;
+            position: relative;
+        }
+
+        .progress-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background: var(--p);
+            box-shadow: 0 0 10px var(--p);
+        }
+
+        /* --- FOOTER --- */
+        footer {
+            padding: 10rem 10% 5rem;
+            text-align: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .f-logo {
+            font-family: var(--f-h);
+            font-size: 4rem;
+            margin-bottom: 2rem;
+            letter-spacing: -2px;
+        }
+
+        @media (max-width: 768px) {
+            .roadmap-container::before {
+                left: 5%;
+            }
+
+            .step-wrapper {
+                justify-content: flex-end !important;
+            }
+
+            .step-card {
+                width: 85%;
+            }
+
+            .step-connector {
+                left: 5%;
+            }
+
+            .nav-center {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+    <div class="auras">
+        <div class="aura a-1"></div>
+        <div class="aura a-2"></div>
+    </div>
+
+    <div id="eyeCursor">
+        <div class="eye-outer">
+            <div class="eye-dot"></div>
+        </div>
+    </div>
+
+    <nav>
+        <a href="index.html" class="logo">prime<span>bot</span></a>
+        <div class="nav-center">
+            <a href="index.html" class="nav-link">Home</a>
+            <a href="roadmap.html" class="nav-link active">Roadmap</a>
+            <a href="playground.html" class="nav-link">Test</a>
+            <a href="bmr.html" class="nav-link">BMR</a>
+        </div>
+        <a href="https://ptb.discord.com/oauth2/authorize?client_id=1466029119275012139" target="_blank"
+            style="font-family: var(--f-m); font-size: 0.6rem; color: #fff; text-decoration: none; border: 1px solid rgba(255,255,255,0.1); padding: 8px 16px; border-radius: 100px;">ADD
+            BOT</a>
+    </nav>
+
+    <header class="hero">
+        <span class="section-tag">// strategic progress</span>
+        <h1>THE<br>MANIFEST.</h1>
+    </header>
+
+    <div class="roadmap-container">
+        <!-- STEP 01 -->
+        <div class="step-wrapper">
+            <div class="step-connector"></div>
+            <div class="step-card">
+                <span class="step-num">01</span>
+                <span class="status-tag">Completed</span>
+                <h3>NEURAL ENGINE</h3>
+                <p>Core AI architecture established. Command processing logic and high-frequency data handling
+                    operational.</p>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 100%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 02 -->
+        <div class="step-wrapper">
+            <div class="step-connector"></div>
+            <div class="step-card active">
+                <span class="step-num">02</span>
+                <span class="status-tag">Live / Deploying</span>
+                <h3>TACTICAL HUD</h3>
+                <p>Developing high-performance visual interfaces and immersive user experiences across the ecosystem.
+                </p>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 85%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 03 -->
+        <div class="step-wrapper">
+            <div class="step-connector"></div>
+            <div class="step-card">
+                <span class="step-num">03</span>
+                <span class="status-tag">Researching</span>
+                <h3>INTELLIGENCE PULSE</h3>
+                <p>Deep-learning behavioral analysis to predict community trends and provide strategic server insights.
+                </p>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 30%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 04 -->
+        <div class="step-wrapper">
+            <div class="step-connector"></div>
+            <div class="step-card">
+                <span class="step-num">04</span>
+                <span class="status-tag">Planned</span>
+                <h3>THE VAULT</h3>
+                <p>A secure gallery of server artifacts and 3D visualized community achievements.</p>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 0%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STEP 05 -->
+        <div class="step-wrapper">
+            <div class="step-connector"></div>
+            <div class="step-card" style="opacity: 0.5;">
+                <span class="step-num">05</span>
+                <span class="status-tag">Encrypted</span>
+                <h3>AUTONOMOUS LOGIC</h3>
+                <p>Total server decentralization through intelligent bot-to-bot community management protocols.</p>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 0%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <div class="f-logo">PRIME.</div>
+        <p style="font-family: var(--f-m); font-size: 0.6rem; color: rgba(255,255,255,0.2); letter-spacing: 5px;">EST.
+            2026 // RAXZSTDIOZ</p>
+    </footer>
+
+    <script>
+        const eye = document.getElementById('eyeCursor');
+        window.addEventListener('mousemove', (e) => {
+            eye.style.left = e.clientX - 20 + 'px';
+            eye.style.top = e.clientY - 20 + 'px';
+        });
+
+        // Hover effect for cards
+        document.querySelectorAll('.step-card').forEach(card => {
+            card.addEventListener('mouseenter', () => {
+                eye.style.transform = 'scale(1.5)';
+                eye.querySelector('.eye-outer').style.borderColor = 'var(--p)';
+            });
+            card.addEventListener('mouseleave', () => {
+                eye.style.transform = 'scale(1)';
+                eye.querySelector('.eye-outer').style.borderColor = 'rgba(255,255,255,0.1)';
+            });
+        });
+    </script>
+</body>
+
+</html>

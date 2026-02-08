@@ -243,14 +243,18 @@
 
         @keyframes blink {
 
-            0%,
-            100% {
-                opacity: 1;
-            }
-
             50% {
                 opacity: 0.3;
             }
+        }
+
+        .interference {
+            position: fixed;
+            inset: 0;
+            z-index: 99999999;
+            background: rgba(var(--p-rgb), 0.05);
+            display: none;
+            pointer-events: none;
         }
 
         .logo {
@@ -484,6 +488,7 @@
             <div class="loader-text">loading</div>
         </div>
     </div>
+    <div class="interference" id="interference"></div>
 
     <script>
         function removeLoader() {
@@ -705,6 +710,28 @@
                 if (ls && ls.classList.contains('open')) {
                     ls.classList.remove('open');
                 }
+            }
+        }
+
+        // --- SECURITY BLOCKING ---
+        window.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            showInterference();
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) || (e.ctrlKey && e.key === 'u')) {
+                e.preventDefault();
+                showInterference();
+                return false;
+            }
+        });
+
+        function showInterference() {
+            const inf = document.getElementById('interference');
+            if (inf) {
+                inf.style.display = 'block';
+                setTimeout(() => inf.style.display = 'none', 200);
             }
         }
     </script>

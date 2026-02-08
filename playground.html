@@ -126,6 +126,16 @@
             position: relative;
         }
 
+        @keyframes shimmer {
+            0% {
+                transform: translateX(-100%) skewX(-15deg);
+            }
+
+            100% {
+                transform: translateX(200%) skewX(-15deg);
+            }
+        }
+
         .console-window {
             width: 100%;
             max-width: 1000px;
@@ -309,20 +319,345 @@
         }
 
         .back-btn {
-            font-family: var(--f-m);
-            font-size: 0.7rem;
+            font-family: var(--f-h);
+            font-size: 0.6rem;
+            font-weight: 900;
             color: #fff;
             text-decoration: none;
-            border: 1px solid var(--border);
-            padding: 8px 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 10px 20px;
+            transition: all 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+            position: relative;
+            overflow: hidden;
             border-radius: 4px;
-            transition: 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            letter-spacing: 2px;
         }
 
         .back-btn:hover {
             border-color: var(--p);
             color: var(--p);
+            transform: translateX(-5px);
+            box-shadow: 0 0 30px rgba(var(--p-rgb), 0.2);
+        }
+
+        .back-btn::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 40%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transform: translateX(-100%) skewX(-15deg);
+        }
+
+        .back-btn:hover::after {
+            animation: shimmer 1.5s infinite;
+        }
+
+        /* --- COMMAND PALETTE --- */
+        .cmd-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(20px);
+            z-index: 1000000;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding-top: 15vh;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+
+        .cmd-overlay.open {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .cmd-box {
+            width: 100%;
+            max-width: 650px;
+            background: rgba(10, 10, 10, 0.95);
+            border: 1px solid rgba(var(--p-rgb), 0.2);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 50px 100px rgba(0, 0, 0, 0.8), 0 0 50px rgba(var(--p-rgb), 0.1);
+            transform: scale(0.95) translateY(20px);
+            transition: all 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+
+        .cmd-overlay.open .cmd-box {
+            transform: scale(1) translateY(0);
+        }
+
+        .cmd-input-wrap {
+            position: relative;
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .cmd-input-wrap i {
+            color: var(--p);
+            font-size: 1.2rem;
+        }
+
+        .cmd-input {
+            background: transparent;
+            border: none;
+            width: 100%;
+            color: #fff;
+            font-family: var(--f-m);
+            font-size: 1.1rem;
+            outline: none;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .cmd-results {
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 1rem 0;
+        }
+
+        .cmd-item {
+            padding: 1rem 2.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            transition: 0.2s;
+            border-left: 2px solid transparent;
+        }
+
+        .cmd-item:hover,
+        .cmd-item.active {
             background: rgba(var(--p-rgb), 0.05);
+            border-left-color: var(--p);
+        }
+
+        .cmd-item-info {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .cmd-item i {
+            font-size: 1rem;
+            color: var(--p);
+            opacity: 0.5;
+        }
+
+        .cmd-item:hover i,
+        .cmd-item.active i {
+            opacity: 1;
+        }
+
+        .cmd-label {
+            display: block;
+            font-family: var(--f-m);
+            font-size: 0.8rem;
+            letter-spacing: 2px;
+            color: #fff;
+        }
+
+        .item-desc {
+            display: block;
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.3);
+            margin-top: 4px;
+        }
+
+        .cmd-hint {
+            font-family: var(--f-m);
+            font-size: 0.6rem;
+            color: var(--p);
+            opacity: 0.5;
+            background: rgba(var(--p-rgb), 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .cmd-footer {
+            padding: 1rem 2rem;
+            background: rgba(255, 255, 255, 0.02);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            gap: 2rem;
+            font-family: var(--f-m);
+            font-size: 0.6rem;
+            color: rgba(255, 255, 255, 0.2);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .cmd-footer span b {
+            color: var(--p);
+        }
+
+        /* --- CUSTOM CONTEXT MENU --- */
+        #contextMenu {
+            position: fixed;
+            z-index: 10000000;
+            width: 240px;
+            background: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(var(--p-rgb), 0.3);
+            border-radius: 8px;
+            padding: 10px 0;
+            display: none;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 20px rgba(var(--p-rgb), 0.1);
+            animation: menuFadeIn 0.2s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+
+        @keyframes menuFadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95) translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .ctx-item {
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: rgba(255, 255, 255, 0.6);
+            font-family: var(--f-m);
+            font-size: 0.65rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .ctx-item:hover {
+            background: rgba(var(--p-rgb), 0.08);
+            color: #fff;
+            padding-left: 25px;
+        }
+
+        .ctx-item i {
+            font-size: 0.8rem;
+            width: 20px;
+            color: rgba(var(--p-rgb), 0.4);
+        }
+
+        .ctx-item:hover i {
+            color: var(--p);
+        }
+
+        .ctx-sep {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.05);
+            margin: 8px 0;
+        }
+
+        .ctx-header {
+            padding: 8px 20px 12px;
+            font-family: var(--f-m);
+            font-size: 0.5rem;
+            color: var(--p);
+            letter-spacing: 3px;
+            opacity: 0.5;
+            text-transform: uppercase;
+        }
+
+        /* --- FOOTER --- */
+        footer {
+            margin-top: auto;
+            padding: 4rem 10% 2rem;
+            background: linear-gradient(to top, rgba(var(--p-rgb), 0.03), transparent);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .f-main {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4rem;
+        }
+
+        .f-logo h2 {
+            font-family: var(--f-h);
+            font-size: 4rem;
+            letter-spacing: -2px;
+            background: linear-gradient(45deg, #fff, rgba(255, 255, 255, 0.3));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .f-credits {
+            text-align: right;
+            border-right: 4px solid var(--p);
+            padding-right: 2rem;
+        }
+
+        .f-credits p {
+            font-family: var(--f-m);
+            font-size: 1.2rem;
+            letter-spacing: 4px;
+            color: #fff;
+            margin-bottom: 0.5rem;
+        }
+
+        .f-credits span {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            color: rgba(255, 255, 255, 0.3);
+        }
+
+        .f-bottom {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .f-link {
+            font-family: var(--f-m);
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.4);
+            text-decoration: none;
+            letter-spacing: 2px;
+            transition: 0.3s;
+            padding: 5px 10px;
+            border: 1px solid transparent;
+        }
+
+        .f-link:hover {
+            color: var(--p);
+            border-color: rgba(var(--p-rgb), 0.2);
+            background: rgba(var(--p-rgb), 0.02);
+            text-shadow: 0 0 10px var(--p);
+        }
+
+        .interference {
+            position: fixed;
+            inset: 0;
+            z-index: 9999999;
+            background: rgba(var(--p-rgb), 0.05);
+            display: none;
+            pointer-events: none;
         }
     </style>
 </head>
@@ -344,7 +679,10 @@
 
     <nav>
         <a href="index.html" class="logo-text">PRIME<span>.</span></a>
-        <a href="index.html" class="back-btn"><i class="fa-solid fa-arrow-left"></i> EXIT PLAYGROUND</a>
+        <a href="index.html" class="back-btn">
+            <i class="fa-solid fa-power-off"></i>
+            <span>EXIT SESSION</span>
+        </a>
     </nav>
 
     <main>
@@ -355,7 +693,7 @@
                     <div class="dot yellow"></div>
                     <div class="dot green"></div>
                 </div>
-                <div class="console-title">PRIME_INTERNAL_v2.0 // PLAYGROUND</div>
+                <div class="console-title">PRIME LIVE SESSION // v2.0</div>
                 <div style="width: 50px;"></div>
             </div>
 
@@ -376,6 +714,66 @@
             </div>
         </div>
     </main>
+
+    <div class="cmd-overlay" id="cmdPalette">
+        <div class="cmd-box">
+            <div class="cmd-input-wrap">
+                <i class="fa-solid fa-terminal"></i>
+                <input type="text" class="cmd-input" placeholder="SEARCH COMMANDS..." id="cmdInput">
+            </div>
+            <div class="cmd-results" id="cmdResults">
+                <!-- Dynamically populated -->
+            </div>
+            <div class="cmd-footer">
+                <span><b>↑↓</b> NAVIGATE</span>
+                <span><b>ENTER</b> SELECT</span>
+                <span><b>ESC</b> CLOSE</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- CUSTOM CONTEXT MENU -->
+    <div id="contextMenu">
+        <div class="ctx-header">Quick Menu</div>
+        <div class="ctx-item" onclick="location.reload()">
+            <span>Refresh Page</span>
+            <i class="fa-solid fa-rotate"></i>
+        </div>
+        <div class="ctx-item" onclick="togglePalette()">
+            <span>Open Search</span>
+            <i class="fa-solid fa-terminal"></i>
+        </div>
+        <div class="ctx-sep"></div>
+        <div class="ctx-item"
+            onclick="window.open('https://ptb.discord.com/oauth2/authorize?client_id=1466029119275012139', '_blank')">
+            <span>Add Bot to Discord</span>
+            <i class="fa-solid fa-robot"></i>
+        </div>
+        <div class="ctx-item" onclick="window.location.href='support.html'">
+            <span>Get Support</span>
+            <i class="fa-solid fa-headset"></i>
+        </div>
+    </div>
+
+    <div class="interference" id="interference"></div>
+
+    <footer>
+        <div class="f-main">
+            <div class="f-logo">
+                <h2>PRIME.</h2>
+            </div>
+            <div class="f-credits">
+                <p>CREATED BY <a href="bmr.html"
+                        style="color:var(--p); text-decoration:none; border-bottom:1px solid rgba(0,255,170,0.3); padding-bottom:2px;">BMR</a>
+                </p>
+                <span>RIGHTS PROTECTED BY RAXSTDIOZ</span>
+            </div>
+        </div>
+        <div class="f-bottom">
+            <a href="terms.html" class="f-link">TERMS</a>
+            <a href="privacy.html" class="f-link">PRIVACY</a>
+        </div>
+    </footer>
 
     <script>
         const consoleBody = document.getElementById('consoleBody');
@@ -437,13 +835,6 @@
 
         consoleInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && consoleInput.value.trim() !== '') {
-                if (chatCount >= 2) {
-                    addMessage('System', 'ACCESS RESTRICTED: Daily playground limit reached. Add Prime to your server for unlimited access.', 'msg system');
-                    addMessage('Prime', 'i can only talk so much for free. <a href="https://ptb.discord.com/oauth2/authorize?client_id=1466029119275012139" target="_blank" style="color:var(--p); font-weight:bold;">[ADD ME]</a> to keep the flow going.', 'msg bot');
-                    consoleInput.value = '';
-                    return;
-                }
-
                 const cmd = consoleInput.value.trim();
                 addMessage('User', cmd, 'msg user');
                 consoleInput.value = '';
@@ -451,59 +842,228 @@
                 // Simulate bot thinking
                 setTimeout(() => {
                     handleCommand(cmd);
-                    chatCount++;
-                    localStorage.setItem('prime_playground_chats', chatCount);
                 }, 600);
             }
         });
 
-        function handleCommand(cmd) {
+        async function handleCommand(cmd) {
             const lowerCmd = cmd.toLowerCase();
-            const args = cmd.split(' ');
 
-            if (lowerCmd.startsWith('!vibe')) {
-                const r = responses["!vibe"][Math.floor(Math.random() * responses["!vibe"].length)];
-                addMessage('Prime', r, 'msg bot');
-            } else if (lowerCmd.startsWith('!motivate')) {
-                const r = responses["!motivate"][Math.floor(Math.random() * responses["!motivate"].length)];
-                addMessage('Prime', r, 'msg bot');
-            } else if (lowerCmd.startsWith('!roast')) {
-                const target = args[1] || 'you';
-                const roasts = [
-                    `${target}? i've seen default presets with more personality.`,
-                    `${target}'s work looks like it was rendered on a toaster from 2008.`,
-                    `${target} talks a big game for someone who still follows 'how to center a div' tutorials.`,
-                    `i would roast ${target}, but my ai safety protocols prevent me from bullying the defenseless.`
-                ];
-                addMessage('Prime', roasts[Math.floor(Math.random() * roasts.length)], 'msg bot');
-            } else if (lowerCmd.startsWith('!assets')) {
-                const r = responses["!assets"][Math.floor(Math.random() * responses["!assets"].length)];
-                addMessage('Prime', r, 'msg bot');
-            } else if (lowerCmd.startsWith('!glitch')) {
-                const text = args.slice(1).join(' ') || "PRIME";
-                const glitched = text.split('').map(c => c + (Math.random() > 0.5 ? '̵' : '̶')).join('');
-                addMessage('Prime', `⚡ STYLED TEXT:\n\`\`\`\n${glitched}\n\`\`\``, 'msg bot');
-            } else if (lowerCmd.startsWith('!stack')) {
-                addMessage('Prime', "🦾 VFX PLUGIN STACK:\n1. Sapphire Glow (Radius: 320, Intensity: 1.2)\n2. BCC Film Grain (Opacity: 15%)\n3. Deep Glow (Exposure: 0.8)\n\nOrder: Light -> Texture -> Polish.", 'msg bot');
-            } else if (lowerCmd.startsWith('!aura')) {
-                const target = args[1] || 'USER';
-                addMessage('Prime', `🔮 USER PROFILE: ${target}\n**Current Vibe:** \`ELITE\`\n\n**AI Profile Summary:**\nSubject displays high-tier creative drive and consistent architectural focus.`, 'msg bot');
-            } else if (lowerCmd === '!help') {
-                addMessage('Prime', "Available protocols: !vibe, !roast, !assets, !motivate, !glitch, !stack, !aura, !pulse, !help", 'msg bot');
-            } else if (lowerCmd === '!clear') {
+            if (lowerCmd === '!clear') {
                 consoleBody.innerHTML = '<div class="msg system"><div class="content">Console cleared.</div></div>';
                 chatCount = 0;
-            } else {
-                // Generic AI Chat Simulation
-                const generic = [
-                    "that's an interesting take. tell me more about your vision.",
-                    "i'm focused on the elite architecture of this playground right now.",
-                    "lowkey i see what you're doing. keep that energy.",
-                    "i'm built for this. what else you got?"
-                ];
-                addMessage('Prime', generic[Math.floor(Math.random() * generic.length)], 'msg bot');
+                localStorage.setItem('prime_playground_chats', chatCount);
+                return;
+            }
+
+            if (chatCount >= 3) {
+                addMessage('System', 'ACCESS RESTRICTED: Daily playground limit reached. Add Prime to your server for unlimited access.', 'msg system');
+                addMessage('Prime', 'i can only talk so much for free. <a href="https://ptb.discord.com/oauth2/authorize?client_id=1466029119275012139" target="_blank" style="color:var(--p); font-weight:bold;">[ADD ME]</a> to keep the flow going.', 'msg bot');
+                consoleInput.disabled = true;
+                consoleInput.placeholder = 'LIMIT REACHED...';
+                return;
+            }
+
+            // Show typing indicator
+            const typingId = 'typing-' + Date.now();
+            const typingDiv = document.createElement('div');
+            typingDiv.id = typingId;
+            typingDiv.className = 'msg bot';
+            typingDiv.innerHTML = `<div class="prefix">PRIME:</div><div class="content"><i class="fa-solid fa-circle-notch fa-spin"></i> processing...</div>`;
+            consoleBody.appendChild(typingDiv);
+            consoleBody.scrollTop = consoleBody.scrollHeight;
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: cmd,
+                        user_id: 999, // Dynamic user IDs could be added later
+                        username: "PlaygroundUser"
+                    })
+                });
+
+                const data = await response.json();
+
+                // Remove typing indicator
+                const indicator = document.getElementById(typingId);
+                if (indicator) indicator.remove();
+
+                if (data.response) {
+                    addMessage('Prime', data.response, 'msg bot');
+                    chatCount++;
+                    localStorage.setItem('prime_playground_chats', chatCount);
+
+                    if (chatCount >= 3) {
+                        setTimeout(() => {
+                            addMessage('System', 'ACCESS RESTRICTED: Add Prime to your server to continue.', 'msg system');
+                            addMessage('Prime', 'want to keep the flow going? <a href="https://ptb.discord.com/oauth2/authorize?client_id=1466029119275012139" target="_blank" style="color:var(--p); font-weight:bold;">[ADD ME]</a> to your server.', 'msg bot');
+                            consoleInput.disabled = true;
+                            consoleInput.placeholder = 'LIMIT REACHED...';
+                        }, 1000);
+                    }
+                } else {
+                    addMessage('Prime', 'Search failed. The neural link is unstable.', 'msg bot');
+                }
+
+            } catch (error) {
+                console.error('Chat Error:', error);
+                const indicator = document.getElementById(typingId);
+                if (indicator) indicator.remove();
+                addMessage('Prime', 'Critical Error: Connection to Prime Core lost.', 'msg bot');
             }
         }
+
+        // Initial check for limit on page load
+        if (chatCount >= 3) {
+            consoleInput.disabled = true;
+            consoleInput.placeholder = 'LIMIT REACHED...';
+        }
+
+        // --- COMMAND PALETTE DATA ---
+        const cmdData = [
+            { label: "GO TO HOME", desc: "Return to the main page", icon: "fa-house", action: () => window.location.href = 'index.html', hint: "H" },
+            { label: "RELOAD SESSION", desc: "Refresh the current playground", icon: "fa-rotate", action: () => location.reload(), hint: "R" },
+            { label: "CLEAR CONSOLE", desc: "Wipe chat history", icon: "fa-trash", action: () => handleCommand('!clear'), hint: "C" },
+            { label: "ADD TO SERVER", desc: "Invite Prime to your Discord", icon: "fa-robot", action: () => window.open('https://ptb.discord.com/oauth2/authorize?client_id=1466029119275012139', '_blank'), hint: "I" },
+            { label: "GET SUPPORT", desc: "Join our community for help", icon: "fa-headset", action: () => window.location.href = 'support.html', hint: "S" },
+            { label: "SYSTEM STATUS", desc: "Check bot and API uptime", icon: "fa-server", action: () => window.location.href = 'status.html', hint: "U" }
+        ];
+
+        let selectedIdx = 0;
+        const cmdOverlay = document.getElementById('cmdPalette');
+        const cmdInput = document.getElementById('cmdInput');
+        const cmdResults = document.getElementById('cmdResults');
+
+        function togglePalette(forceClose = false) {
+            if (forceClose || cmdOverlay.classList.contains('open')) {
+                cmdOverlay.classList.remove('open');
+                cmdInput.value = "";
+            } else {
+                cmdOverlay.classList.add('open');
+                setTimeout(() => cmdInput.focus(), 50);
+                renderResults();
+            }
+        }
+
+        function renderResults() {
+            const query = cmdInput.value.toLowerCase();
+            const filtered = cmdData.filter(item =>
+                item.label.toLowerCase().includes(query) ||
+                item.desc.toLowerCase().includes(query)
+            );
+
+            cmdResults.innerHTML = filtered.map((item, i) => `
+                <div class="cmd-item ${i === selectedIdx ? 'active' : ''}" onclick="executeAction(${i})">
+                    <div class="cmd-item-info">
+                        <i class="fa-solid ${item.icon}"></i>
+                        <div>
+                            <span class="cmd-label">${item.label}</span>
+                            <span class="item-desc">${item.desc}</span>
+                        </div>
+                    </div>
+                    <span class="cmd-hint">${item.hint}</span>
+                </div>
+            `).join('');
+
+            if (selectedIdx >= filtered.length) selectedIdx = Math.max(0, filtered.length - 1);
+        }
+
+        function executeAction(idx) {
+            const query = cmdInput.value.toLowerCase();
+            const filtered = cmdData.filter(item =>
+                item.label.toLowerCase().includes(query) ||
+                item.desc.toLowerCase().includes(query)
+            );
+
+            if (filtered[idx]) {
+                filtered[idx].action();
+                togglePalette(true);
+            }
+        }
+
+        // --- CONTEXT MENU LOGIC ---
+        const contextMenu = document.getElementById('contextMenu');
+        const interference = document.getElementById('interference');
+
+        window.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            const { clientX: x, clientY: y } = e;
+            contextMenu.style.left = `${x}px`;
+            contextMenu.style.top = `${y}px`;
+            contextMenu.style.display = 'block';
+
+            // Visual interference effect
+            interference.style.display = 'block';
+            setTimeout(() => interference.style.display = 'none', 150);
+        });
+
+        window.addEventListener('click', () => {
+            contextMenu.style.display = 'none';
+        });
+
+        // --- GLOBAL KEYBOARD LISTENERS ---
+        window.addEventListener('keydown', (e) => {
+            // Command Palette Toggle (Ctrl+K or Cmd+K)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+                togglePalette();
+            }
+
+            // --- SECURITY BLOCKING ---
+            // Block F12
+            if (e.key === 'F12') {
+                e.preventDefault();
+                showInterference();
+                return false;
+            }
+            // Block Ctrl+Shift+I, J, C
+            if (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) {
+                e.preventDefault();
+                showInterference();
+                return false;
+            }
+            // Block Ctrl+U (View Source)
+            if (e.ctrlKey && e.key === 'u') {
+                e.preventDefault();
+                showInterference();
+                return false;
+            }
+
+            if (!cmdOverlay.classList.contains('open')) return;
+
+            // Palette Navigation
+            if (e.key === 'Escape') togglePalette(true);
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                selectedIdx = (selectedIdx + 1) % cmdResults.children.length;
+                renderResults();
+            }
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                selectedIdx = (selectedIdx - 1 + cmdResults.children.length) % cmdResults.children.length;
+                renderResults();
+            }
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                executeAction(selectedIdx);
+            }
+        });
+
+        function showInterference() {
+            interference.style.display = 'block';
+            setTimeout(() => interference.style.display = 'none', 200);
+        }
+
+        cmdInput.addEventListener('input', () => {
+            selectedIdx = 0;
+            renderResults();
+        });
+
+        cmdOverlay.addEventListener('click', (e) => {
+            if (e.target === cmdOverlay) togglePalette(true);
+        });
     </script>
 </body>
 

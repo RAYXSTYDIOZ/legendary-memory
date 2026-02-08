@@ -11,6 +11,82 @@
     --f-display: 'Fraunces', serif;
 }
 
+/* Auth State */
+.auth-pending main,
+.auth-pending .sidebar,
+.auth-pending .back-to-top {
+    display: none !important;
+}
+
+.login-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--bg);
+    background-image: radial-gradient(circle at 50% 50%, rgba(0, 255, 170, 0.05) 0%, transparent 80%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.login-card {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(40px);
+    border: 1px solid var(--border);
+    padding: 4rem;
+    border-radius: 40px;
+    text-align: center;
+    max-width: 450px;
+    width: 90%;
+    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.5);
+}
+
+.login-card h1 {
+    font-family: var(--f-display);
+    font-size: 2.5rem;
+    font-weight: 400;
+    margin-bottom: 1rem;
+    color: #fff;
+}
+
+.login-card p {
+    color: rgba(255, 255, 255, 0.4);
+    margin-bottom: 2.5rem;
+    font-weight: 300;
+    line-height: 1.6;
+}
+
+.btn-login {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: #5865f2;
+    /* Discord Color */
+    color: white;
+    padding: 1.2rem 2.5rem;
+    border-radius: 100px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+    width: 100%;
+}
+
+.btn-login:hover {
+    background: #4752c4;
+    transform: translateY(-4px);
+    box-shadow: 0 10px 30px rgba(88, 101, 242, 0.3);
+}
+
+.btn-login i {
+    font-size: 1.3rem;
+}
+
+
 * {
     margin: 0;
     padding: 0;
