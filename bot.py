@@ -6887,6 +6887,10 @@ async def set_rules_command(ctx):
             await ctx.send(f"⚠️ **Warning**: Rules posted, but I couldn't pin them (check my permissions).", delete_after=10)
             logger.error(f"Failed to pin rules: {e}")
 
+    except Exception as e:
+        logger.error(f"Error in setrules command: {e}")
+        await ctx.send(f"❌ **System Error**: Failed to deploy rules protocol. {str(e)}", delete_after=10)
+
 @bot.command(name="editingsoftwares")
 async def editing_softwares_command(ctx):
     """Protocol: List all available creative software distributions."""
