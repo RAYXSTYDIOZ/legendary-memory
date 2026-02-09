@@ -7028,10 +7028,10 @@ async def plugins_command(ctx):
 async def borisfx_command(ctx):
     """BorisFX Plugins."""
     plugins = {
-        "Continuum (BCC) 2026.0": "https://example.com/borisfx/bcc",
-        "Sapphire 2026.0": "https://example.com/borisfx/sapphire",
-        "Mocha Pro 2026.0": "https://example.com/borisfx/mocha",
-        "Silhouette 2025.5": "https://example.com/borisfx/silhouette"
+        "Continuum (BCC) 2026.0": "https://pixeldrain.com/u/9GedTDgJ",
+        "Sapphire 2026.0": "https://pixeldrain.com/u/3jA6Amu4",
+        "Mocha Pro 2026.0": "https://pixeldrain.com/u/QsFujGNU",
+        "Silhouette 2025.5": "https://pixeldrain.com/u/rEJTBd73"
     }
     embed = discord.Embed(
         title="🔥 BORISFX SUITE",
