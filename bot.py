@@ -5145,7 +5145,7 @@ async def file_command_handler(message):
                       "level", "leaderboard", "rank", "sync", "manual_sync", "commands", "cmds", "nudge", "portfolio", "profile", "p",
                       "ae", "pr", "me", "ps", "topaz", "editingsoftwares",
                       "plugins", "borisfx", "maxon", "revisionfx", "videocopilot", "autokroma", "zaebects", "plugineverything", "elementsupply", "pixelsorter", "filmconvert",
-                      "extensions", "access", "animate", "illustrator", "indesign", "lightroom"]:
+                      "extensions", "access", "animate", "illustrator", "indesign", "lightroom", "audition", "incopy"]:
         return
     
     logger.info(f'User {message.author.name} (ID: {message.author.id}) requested file: {requested_file}')
@@ -6875,7 +6875,9 @@ async def editing_softwares_command(ctx):
             "• `!animate` - Adobe Animate\n"
             "• `!illustrator` - Adobe Illustrator\n"
             "• `!indesign` - Adobe InDesign\n"
-            "• `!lightroom` - Lightroom Classic\n\n"
+            "• `!lightroom` - Lightroom Classic\n"
+            "• `!audition` - Adobe Audition\n"
+            "• `!incopy` - Adobe InCopy\n\n"
             "*Type a command from above to see the versions and download links.*"
         ),
         color=0x00FFB4,
@@ -7007,7 +7009,7 @@ async def topaz_versions_command(ctx):
 async def animate_command(ctx):
     """Adobe Animate."""
     versions = {
-        "Adobe Animate 2024": "https://pixeldrain.com/u/LwjNBcrs"
+        "Adobe Animate 2024": "https://pixeldrain.com/u/xHwmBZtc"
     }
     embed = discord.Embed(
         title="🎬 ADOBE ANIMATE | VERSIONS",
@@ -7024,7 +7026,7 @@ async def animate_command(ctx):
 async def illustrator_command(ctx):
     """Adobe Illustrator."""
     versions = {
-        "Adobe Illustrator": "https://pixeldrain.com/u/1oup7hvu"
+        "Adobe Illustrator 2026": "https://pixeldrain.com/u/PQyatwYo"
     }
     embed = discord.Embed(
         title="🎨 ADOBE ILLUSTRATOR | VERSIONS",
@@ -7041,7 +7043,7 @@ async def illustrator_command(ctx):
 async def indesign_command(ctx):
     """Adobe InDesign."""
     versions = {
-        "Adobe InDesign 2024": "https://pixeldrain.com/u/PaqkPJeJ"
+        "Adobe InDesign 2026": "https://pixeldrain.com/u/Q5UT44JN"
     }
     embed = discord.Embed(
         title="📖 ADOBE INDESIGN | VERSIONS",
@@ -7058,7 +7060,7 @@ async def indesign_command(ctx):
 async def lightroom_command(ctx):
     """Adobe Lightroom Classic."""
     versions = {
-        "Lightroom Classic 2024": "https://pixeldrain.com/u/MfMGYg6c"
+        "Lightroom Classic": "https://pixeldrain.com/u/12CcF1oZ"
     }
     embed = discord.Embed(
         title="📸 ADOBE LIGHTROOM | VERSIONS",
@@ -7069,6 +7071,40 @@ async def lightroom_command(ctx):
     for name, link in versions.items():
         embed.add_field(name=name, value=f"🔗 [Download]({link})", inline=True)
     embed.set_footer(text="Prime | Photo Setup")
+    await ctx.send(embed=embed)
+
+@bot.command(name="audition")
+async def audition_command(ctx):
+    """Adobe Audition."""
+    versions = {
+        "Adobe Audition 2025": "https://pixeldrain.com/u/9vJstMbs"
+    }
+    embed = discord.Embed(
+        title="🎙️ ADOBE AUDITION | VERSIONS",
+        description="Professional audio workstation software.\n\n🔑 **Password**: `star`",
+        color=0x00FFCC,
+        timestamp=datetime.now(timezone.utc)
+    )
+    for name, link in versions.items():
+        embed.add_field(name=name, value=f"🔗 [Download]({link})", inline=True)
+    embed.set_footer(text="Prime | Audio Setup")
+    await ctx.send(embed=embed)
+
+@bot.command(name="incopy")
+async def incopy_command(ctx):
+    """Adobe InCopy."""
+    versions = {
+        "Adobe InCopy 2026": "https://pixeldrain.com/u/NyBb6p44"
+    }
+    embed = discord.Embed(
+        title="🖋️ ADOBE INCOPY | VERSIONS",
+        description="Pick the version you need for collaborative writing.\n\n🔑 **Password**: `star`",
+        color=0xFF33CC,
+        timestamp=datetime.now(timezone.utc)
+    )
+    for name, link in versions.items():
+        embed.add_field(name=name, value=f"🔗 [Download]({link})", inline=True)
+    embed.set_footer(text="Prime | Writing Setup")
     await ctx.send(embed=embed)
 
 @bot.command(name="plugins")
