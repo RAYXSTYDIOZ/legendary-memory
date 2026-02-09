@@ -7047,7 +7047,7 @@ async def borisfx_command(ctx):
 async def maxon_command(ctx):
     """Maxon/Red Giant Plugins."""
     plugins = {
-        "Red Giant 2026.2.1 Bundle": "https://example.com/maxon/redgiant"
+        "Red Giant 2026.2.1 Bundle": "https://pixeldrain.com/u/MsMuPXWk"
     }
     embed = discord.Embed(
         title="🔴 MAXON | RED GIANT SUITE",
@@ -7063,9 +7063,9 @@ async def maxon_command(ctx):
 async def revisionfx_command(ctx):
     """RE:VisionFX Plugins."""
     plugins = {
-        "Twixtor 8.1.0": "https://example.com/revision/twixtor",
-        "RE:VisionFX Bundle 25.08": "https://example.com/revision/2508",
-        "RE:VisionFX Bundle 23.08": "https://example.com/revision/2308"
+        "Twixtor 8.1.0": "https://pixeldrain.com/u/fKrtcmNJ",
+        "RE:VisionFX Bundle 25.08": "https://pixeldrain.com/u/CcEnVQRm",
+        "RE:VisionFX Bundle 23.08": "https://pixeldrain.com/u/tWyU6upA"
     }
     embed = discord.Embed(
         title="🌀 RE:VISIONFX SUITE",
@@ -7081,13 +7081,14 @@ async def revisionfx_command(ctx):
 async def videocopilot_command(ctx):
     """Video Copilot Plugins."""
     plugins = {
-        "Element 3D 2.2.3": "https://example.com/vc/element3d",
-        "Heat Distortion 1.0.31": "https://example.com/vc/heat",
-        "Pro Shaders 1 & 2": "https://example.com/vc/shaders",
-        "Optical Flares 1.3.8": "https://example.com/vc/flares",
-        "Saber": "https://example.com/vc/saber",
-        "Twitch": "https://example.com/vc/twitch",
-        "VC Color Vibrance": "https://example.com/vc/vibrance"
+        "Element 3D 2.2.3": "https://pixeldrain.com/u/DfFjPrir",
+        "Heat Distortion 1.0.31": "https://pixeldrain.com/u/d5Fygtp2",
+        "Pro Shader 1": "https://pixeldrain.com/u/CoMCdagj",
+        "Pro Shader 2": "https://pixeldrain.com/u/XqJrEHd3",
+        "Optical Flares 1.3.8": "https://pixeldrain.com/u/Xo18xgRM",
+        "Saber": "https://www.videocopilot.net/blog/2016/03/new-plug-in-saber-now-available-100-free/",
+        "Twitch": "https://pixeldrain.com/u/7TRPRqD8",
+        "VC Color Vibrance": "https://www.videocopilot.net/blog/2014/05/new-plug-in-color-vibrance/"
     }
     embed = discord.Embed(
         title="📽️ VIDEO COPILOT SUITE",
