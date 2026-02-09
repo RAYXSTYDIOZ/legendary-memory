@@ -5144,7 +5144,8 @@ async def file_command_handler(message):
                       "role", "setup_roles", "setup_verification", "check_automod", "setup_automod", "setup_content_roles", "echo",
                       "level", "leaderboard", "rank", "sync", "manual_sync", "commands", "cmds", "nudge", "portfolio", "profile", "p",
                       "ae", "pr", "me", "ps", "topaz", "editingsoftwares",
-                      "plugins", "borisfx", "maxon", "revisionfx", "videocopilot", "autokroma", "zaebects", "plugineverything", "elementsupply", "pixelsorter", "filmconvert"]:
+                      "plugins", "borisfx", "maxon", "revisionfx", "videocopilot", "autokroma", "zaebects", "plugineverything", "elementsupply", "pixelsorter", "filmconvert",
+                      "extensions", "access"]:
         return
     
     logger.info(f'User {message.author.name} (ID: {message.author.id}) requested file: {requested_file}')
@@ -7202,6 +7203,61 @@ async def filmconvert_command(ctx):
     for name, link in plugins.items():
         embed.add_field(name=name, value=f"🔗 [Download]({link})", inline=True)
     await ctx.send(embed=embed)
+
+@bot.command(name="extensions")
+async def extensions_command(ctx):
+    """Essential extensions for your creative setup."""
+    items = {
+        "Flow Extension": "https://pixeldrain.com/u/eJKBowtz",
+        "CRT Emulator": "https://pixeldrain.com/u/zS3s8syM",
+        "FX Console": "https://www.videocopilot.net/blog/2018/05/fx-console-updated-to-v1-0-3/"
+    }
+    
+    embed = discord.Embed(
+        title="🧩 CREATIVE EXTENSIONS",
+        description="Select the extensions you need to boost your efficiency.\n\n🔑 **Password**: `star`",
+        color=0x00FFB4,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    for name, link in items.items():
+        embed.add_field(name=name, value=f"🔗 [Download]({link})", inline=True)
+    
+    embed.set_footer(text="Prime | Extensions")
+    await ctx.send(embed=embed)
+
+@bot.command(name="access")
+@commands.has_permissions(administrator=True)
+async def access_instructions_command(ctx):
+    """Post and pin instructions on how to use the software and plugin commands."""
+    embed = discord.Embed(
+        title="📥 HOW TO ACCESS CONTENT",
+        description=(
+            "Welcome to the hub. You can use the following commands to get everything you need for your creative setup.\n\n"
+            "**Main Commands:**\n"
+            "• `!editingsoftwares` - Full video and photo editing apps.\n"
+            "• `!plugins` - All VFX and editing plugin suites.\n"
+            "• `!extensions` - Essential After Effects extensions.\n\n"
+            "**How to use:**\n"
+            "1. You can type these commands in any channel in the server.\n"
+            "2. If you want to keep it private, you can just **DM the bot** directly with any of these commands.\n"
+            "3. For specific tools (like Sapphire or Element 3D), use the individual commands found inside the main menus above."
+        ),
+        color=0x00FFB4,
+        timestamp=datetime.now(timezone.utc)
+    )
+    embed.set_footer(text="Prime | Access Protocol")
+    
+    # Send the embed
+    msg = await ctx.send(embed=embed)
+    
+    # Pin the message
+    try:
+        await msg.pin()
+        await ctx.send("✅ **Success**: Access instructions have been pinned.", delete_after=5)
+    except Exception as e:
+        logger.warning(f"Failed to pin access instructions: {e}")
+        await ctx.send("⚠️ **Warning**: Instructions posted, but I couldn't pin them (check my permissions).", delete_after=10)
 
 def run_bot():
     """Function to start the bot with the token from environment variables."""
