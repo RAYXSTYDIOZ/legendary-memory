@@ -3536,7 +3536,7 @@ async def on_guild_join(guild):
                     "`!appeal_link @user` - Manually send an appeal form to a user.\n"
                     "`!ban @user` | `!mute @user` - Modern moderation (Appeals included).\n"
                     "`!check_automod` - View current security layers.\n\n"
-                    "We will notify you here once the full version is released. Keep it technical."
+                    "We will notify you here once the full version is released. If you have any feedback or ideas, DM **bmr.ez** on Discord."
                 ),
                 color=0x5865F2
             )
@@ -3598,8 +3598,8 @@ async def on_guild_remove(guild):
                     title="👋 Farewell from PRIME",
                     description=(
                         f"We noticed that **PRIME** was removed from `{guild.name}`.\n\n"
-                        "We're sorry to see you go! If there was a technical issue or something you didn't like, "
-                        "we'd love to hear your feedback to help us improve.\n\n"
+                        "We're sorry to see you go! If there was a technical issue, or if you have any feedback, "
+                        "please DM **bmr.ez** on Discord to help us improve.\n\n"
                         "Thank you for giving us a try. You're welcome back anytime!"
                     ),
                     color=0x2B2D31 # Sleek Dark Neutral
