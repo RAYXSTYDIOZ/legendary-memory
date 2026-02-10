@@ -1868,6 +1868,16 @@ async def leveling_handler(message):
     # Award XP
     xp_to_add = random.randint(15, 25)
     
+    # QUALITY BONUSES
+    # 1. Message Length Bonus (up to +10 XP for long technical messages)
+    if len(message.content) > 100:
+        xp_to_add += min(len(message.content) // 50, 10)
+    
+    # 2. Media Bonus (+15 XP for sharing work/media)
+    if message.attachments:
+        xp_to_add += 15
+        logger.info(f"Media bonus awarded to {message.author.name}")
+
     # HYPE TRAIN MODIFIER (2x XP)
     global hype_active
     if hype_active:
@@ -4329,7 +4339,7 @@ async def help_command(ctx):
     except discord.Forbidden:
         await ctx.send("❌ **Error**: I can't DM you. Please open your DMs and try again.")
 
-@bot.command(name="level", aliases=["rank"])
+@bot.command(name="level", aliases=["rank", "lv"])
 async def level_command(ctx, member: discord.Member = None):
     """Check your current level and XP. Usage: !level [@user]"""
     # Channel restriction check
@@ -4345,7 +4355,7 @@ async def level_command(ctx, member: discord.Member = None):
     user_id = member.id
     
     if user_id not in user_levels:
-        await ctx.send(f"📊 **{member.display_name}** hasn't started their journey yet! (Level 0, 0 XP)")
+        await ctx.send(f"📊 **{member.display_name}** hasn't started earning XP yet. Start chatting to join the leaderboard!")
         return
         
     data = user_levels[user_id]
@@ -4359,61 +4369,81 @@ async def level_command(ctx, member: discord.Member = None):
     aura_vibe = user_memory.get('vibe', 'Neutral') if user_memory else 'Neutral'
     
     embed = discord.Embed(
-        title=f"✨ {member.display_name}'s Profile",
+        title=f"👾  {member.display_name}'s Status",
         color=0x00FFB4
     )
     if member.display_avatar:
         embed.set_thumbnail(url=member.display_avatar.url)
     
-    embed.add_field(name="Level", value=f"**{level}**", inline=True)
-    embed.add_field(name="Total XP", value=f"**{xp}**", inline=True)
-    embed.add_field(name="Current Vibe", value=f"`{aura_vibe.upper()}`", inline=True)
-    embed.add_field(name="XP to Next Level", value=f"{xp_to_next} / {next_level_xp}", inline=False)
+    # Stats row
+    embed.add_field(name="📶 LEVEL", value=f"**{level}**", inline=True)
+    embed.add_field(name="🔋 TOTAL XP", value=f"**{xp}**", inline=True)
+    embed.add_field(name="🌊 VIBE", value=f"`{aura_vibe.upper()}`", inline=True)
     
-    # Progress bar
-    bar_length = 20
+    # Progress visualization
+    bar_length = 15
     progress = min(xp / next_level_xp, 1.0)
     filled = int(progress * bar_length)
-    bar = "█" * filled + "░" * (bar_length - filled)
+    # Using more modern symbols for the bar
+    bar = "■" * filled + "□" * (bar_length - filled)
     
-    embed.add_field(name="Progress", value=f"`{bar}` {int(progress * 100)}%", inline=False)
-    embed.set_footer(text="Keep chatting to earn more!")
+    embed.add_field(
+        name=f"📈 PROGRESS TO LEVEL {level + 1}", 
+        value=f"`{bar}` **{int(progress * 100)}%**\n`{xp_to_next}` XP remaining", 
+        inline=False
+    )
     
+    embed.set_footer(text="Keep it technical. Keep it creative.")
     await ctx.send(embed=embed)
 
 @bot.command(name="leaderboard", aliases=["top", "lb"])
 async def leaderboard_command(ctx):
     """Show the top 10 users with the most XP."""
-    # Channel restriction check
     if ctx.channel.id != LEVELING_CHANNEL_ID:
-        try:
-            await ctx.message.delete()
-        except:
-            pass
-        await ctx.send(f"❌ {ctx.author.mention}, you can only view the leaderboard in <#{LEVELING_CHANNEL_ID}>!", delete_after=10)
+        try: await ctx.message.delete()
+        except: pass
+        await ctx.send(f"❌ {ctx.author.mention}, the leaderboard is only available in <#{LEVELING_CHANNEL_ID}>!", delete_after=10)
         return
 
     if not user_levels:
-        await ctx.send("The leaderboard is currently empty!")
+        await ctx.send("🌑 **The leaderboard is currently empty.** Be the first to start the journey.")
         return
         
-    # Sort users by XP descending
     sorted_users = sorted(user_levels.items(), key=lambda x: x[1]["xp"], reverse=True)
     
     embed = discord.Embed(
-        title="🏆 XP LEADERBOARD",
-        description="Top 10 most active users in the server!",
-        color=0xF1C40F
+        title="🏆  **EPIC LEADERBOARD**",
+        description="*The most active creators in the collective.*",
+        color=0xFFD700 # Gold
     )
     
-    lb_text = ""
+    lb_lines = []
     for i, (uid, data) in enumerate(sorted_users[:10], 1):
         user = bot.get_user(uid)
         user_name = user.name if user else f"User {uid}"
-        lb_text += f"**#{i}** | {user_name} - **Level {data['level']}** ({data['xp']} XP)\n"
         
-    embed.description = lb_text or "No data available."
-    embed.set_footer(text="Prime Leveling System")
+        # Medal styling for top 3
+        prefix = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"`#{i}`"
+        
+        line = f"{prefix} **{user_name}** • Lvl {data['level']} `({data['xp']} XP)`"
+        lb_lines.append(line)
+        
+    lb_text = "\n".join(lb_lines) or "No data available."
+    embed.add_field(name="✨ TOP REPUTATION", value=lb_text, inline=False)
+    
+    # Add User's Rank at the bottom
+    user_rank = "Unknown"
+    for i, (uid, _) in enumerate(sorted_users, 1):
+        if uid == ctx.author.id:
+            user_rank = i
+            break
+    
+    user_data = user_levels.get(ctx.author.id, {"level": 0, "xp": 0})
+    embed.set_footer(text=f"Your Position: #{user_rank} | Level: {user_data['level']} | Keep it up.")
+    
+    if ctx.guild.icon:
+        embed.set_author(name=f"{ctx.guild.name} Hall of Fame", icon_url=ctx.guild.icon.url)
+
     await ctx.send(embed=embed)
 async def list_files_command(ctx):
     """
@@ -5193,7 +5223,7 @@ async def file_command_handler(message):
                       "remind", "note", "timer", "convert", "emoji", "calculate", "weather", "profile", "serverinfo",
                       "creative", "story", "quote", "brainstorm", "design", "name", "aesthetic", "topics", "motivate",
                       "role", "setup_roles", "setup_verification", "check_automod", "setup_automod", "setup_content_roles", "echo",
-                      "level", "leaderboard", "rank", "sync", "manual_sync", "commands", "cmds", "nudge", "portfolio", "profile", "p",
+                      "level", "leaderboard", "rank", "lb", "top", "lv", "r", "sync", "manual_sync", "commands", "cmds", "nudge", "portfolio", "profile", "p",
                       "ae", "pr", "me", "ps", "topaz", "editingsoftwares",
                       "plugins", "borisfx", "maxon", "revisionfx", "videocopilot", "autokroma", "zaebects", "plugineverything", "elementsupply", "pixelsorter", "filmconvert",
                       "extensions", "access", "animate", "illustrator", "indesign", "lightroom", "audition", "incopy"]:
@@ -7432,6 +7462,11 @@ def run_bot():
 
     # Run the bot
     logger.info("Starting bot...")
+    
+    # DB Status Log
+    db_status = "PostgreSQL (Persistent)" if db_manager.is_postgres else "SQLite (Local - Data will reset on Railway redeploy!)"
+    logger.info(f"💾 DATABASE STATUS: {db_status}")
+    
     bot.run(os.getenv("DISCORD_TOKEN"))
 
 if __name__ == "__main__":
