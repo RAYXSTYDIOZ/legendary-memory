@@ -3481,7 +3481,7 @@ async def check_automod_command(ctx):
 
 @bot.event
 async def on_guild_join(guild):
-    """Track who added the bot when joining a new server and automatically setup AutoMod rules."""
+    """Track who added the bot when joining a new server and notify them about early access."""
     global guild_inviters
     logger.info(f'Bot joined new server: {guild.name} (ID: {guild.id})')
     
@@ -3501,13 +3501,40 @@ async def on_guild_join(guild):
                 break
     except discord.Forbidden:
         logger.warning(f'No permission to view audit logs in {guild.name}')
-        # Fall back to guild owner
-        if guild.owner:
-            guild_inviters[str(guild.id)] = guild.owner.id
-            save_guild_inviters(guild_inviters)
-            inviter_name = guild.owner.name
     except Exception as e:
         logger.error(f'Error checking audit logs: {e}')
+
+    # Fall back to guild owner if inviter not found
+    if not inviter and guild.owner:
+        inviter = guild.owner
+        inviter_name = inviter.name
+        guild_inviters[str(guild.id)] = inviter.id
+        save_guild_inviters(guild_inviters)
+
+    # Send Early Access DM to the inviter
+    if inviter:
+        try:
+            embed = discord.Embed(
+                title="🚀 PRIME Bot - Early Access",
+                description=(
+                    f"Thank you for adding **PRIME** to `{guild.name}`!\n\n"
+                    "Please note that the bot is currently in **Early Access**. This means customization options "
+                    "(like prefix changes or custom role IDs) are locked for now to ensure stability.\n\n"
+                    "**Current Features include:**\n"
+                    "• 🛡️ **Elite Moderation**: High-tier anti-spam, profanity filters, and automatic AutoMod.\n"
+                    "• 🎥 **Verification System**: Automated YouTube/Social verification for members.\n"
+                    "• 🏆 **Advanced Leveling**: Reward members with XP, quality bonuses, and aesthetic rank cards.\n"
+                    "• 👁️ **Spectral Interception**: A 'Snitch Engine' to reveal deleted messages for the ultimate social edge.\n"
+                    "• 🤖 **AI Creative Partner**: Direct access to high-tier AI for technical help and brainstorming (!ask).\n\n"
+                    "We will notify you here once the full version of the bot is released. Thanks for being part of the journey!"
+                ),
+                color=0x5865F2
+            )
+            embed.set_footer(text="Prime Collective | Powered by BMR")
+            await inviter.send(embed=embed)
+            logger.info(f"Sent Early Access DM to {inviter_name}")
+        except Exception as dm_err:
+            logger.warning(f"Could not send DM to {inviter_name}: {dm_err}")
     
     # Log the join activity
     await log_activity(
@@ -3541,49 +3568,6 @@ async def on_member_remove(member):
         )
     except: pass
 
-@bot.event
-async def on_guild_join(guild):
-    """Track who added the bot when joining a new server."""
-    global guild_inviters
-    logger.info(f'Bot joined new server: {guild.name} (ID: {guild.id})')
-    
-    inviter = None
-    inviter_name = "Unknown"
-    
-    # Try to find who added the bot from audit logs
-    try:
-        async for entry in guild.audit_logs(limit=10, action=discord.AuditLogAction.bot_add):
-            if entry.target and entry.target.id == bot.user.id:
-                inviter = entry.user
-                inviter_name = inviter.name
-                # Store the inviter
-                guild_inviters[str(guild.id)] = inviter.id
-                save_guild_inviters(guild_inviters)
-                logger.info(f'Bot was added to {guild.name} by {inviter_name}')
-                break
-    except discord.Forbidden:
-        logger.warning(f'No permission to view audit logs in {guild.name}')
-        # Fall back to guild owner
-        if guild.owner:
-            guild_inviters[str(guild.id)] = guild.owner.id
-            save_guild_inviters(guild_inviters)
-            inviter_name = guild.owner.name
-    except Exception as e:
-        logger.error(f'Error checking audit logs: {e}')
-    
-    # Log the join activity
-    await log_activity(
-        "📥 Joined New Server",
-        f"Bot has been added to **{guild.name}**",
-        color=0x00FF00,
-        fields={
-            "Server": guild.name,
-            "Server ID": guild.id,
-            "Members": guild.member_count,
-            "Added By": inviter_name,
-            "Owner": guild.owner.name if guild.owner else "Unknown"
-        }
-    )
 
 @bot.event
 async def on_guild_remove(guild):
