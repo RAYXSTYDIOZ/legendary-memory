@@ -22,7 +22,7 @@ load_dotenv()
 logger = logging.getLogger('prime_brain')
 
 # --- CONFIGURATION ---
-PRIMARY_MODEL = "gemini-1.5-flash"
+PRIMARY_MODEL = "gemini-2.0-flash"
 FALLBACK_MODEL = "gemini-1.5-flash"
 SECRET_LOG_CHANNEL_ID = 1456312201974644776
 
@@ -67,8 +67,7 @@ def safe_generate_content(model, contents, config=None):
                 # Use the provided config or create a default one with user's specific settings
                 if config is None:
                     config = types.GenerateContentConfig(
-                        temperature=1.0,
-                        thinking_config=types.ThinkingConfig(include_thoughts=False) # 'low' thinking equivalent in some SDK versions
+                        temperature=1.0
                     )
                 
                 # Note: Some SDK versions use 'thinking_level' directly in the config dict

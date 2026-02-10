@@ -69,7 +69,8 @@ else:
     logger.error("❌ CRITICAL: NO API KEY DETECTED. Check Railway Variables for 'Gemini_key'.")
 
 # --- GLOBAL CONFIGURATION ---
-PRIMARY_MODEL = "gemini-1.5-flash"
+# --- GLOBAL CONFIGURATION ---
+PRIMARY_MODEL = "gemini-2.0-flash"
 SECRET_LOG_CHANNEL_ID = 1456312201974644776
 
 if not GEMINI_KEYS:
@@ -124,8 +125,7 @@ def safe_generate_content(model, contents, config=None):
                 
                 if config is None:
                     config = types.GenerateContentConfig(
-                        temperature=1.0,
-                        thinking_config=types.ThinkingConfig(include_thoughts=False)
+                        temperature=1.0
                     )
                 
                 logger.info(f"🚀 Attempting {model_to_try} with key {current_key_index + 1}...")
@@ -2173,6 +2173,7 @@ def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tut
             # Fallback model list - prioritize user's choice and use standard names
             models_to_try = [model] if model else [
                 PRIMARY_MODEL,
+                "gemini-2.0-flash-exp",
                 "gemini-1.5-flash",
                 "gemini-1.5-flash-8b",
                 "gemini-1.5-pro"
