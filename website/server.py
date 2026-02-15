@@ -186,7 +186,106 @@ async def get_roles(guild_id: str, request: Request):
         if res.status_code == 200: return res.json()
     return []
 
-# AI ARCHITECT (High Priority Routes)
+@app.get("/api/guilds/{guild_id}/channels")
+async def get_channels(guild_id: str, request: Request):
+    token = request.headers.get("X-Session-Token")
+    if not token or token not in SESSIONS: raise HTTPException(status_code=401)
+    async with httpx.AsyncClient() as client:
+        res = await client.get(f"https://discord.com/api/v10/guilds/{guild_id}/channels", headers={"Authorization": f"Bot {BOT_TOKEN}"})
+        if res.status_code == 200: return res.json()
+    return []
+
+@app.post("/api/guilds/{guild_id}/ai-suggest")
+async def ai_suggest_config(guild_id: str, request: Request):
+    token = request.headers.get("X-Session-Token")
+    if not token or token not in SESSIONS: raise HTTPException(status_code=401)
+    
+    if not brain.GEMINI_KEYS:
+        return {"status": "error", "error": "AI module unavailable."}
+
+    # Fetch context: Channels and Roles
+    async with httpx.AsyncClient() as client:
+        # Get roles
+        r_res = await client.get(f"https://discord.com/api/v10/guilds/{guild_id}/roles", headers={"Authorization": f"Bot {BOT_TOKEN}"})
+        # Get channels
+        c_res = await client.get(f"https://discord.com/api/v10/guilds/{guild_id}/channels", headers={"Authorization": f"Bot {BOT_TOKEN}"})
+        
+        roles = r_res.json() if r_res.status_code == 200 else []
+        channels = c_res.json() if c_res.status_code == 200 else []
+
+    # Prepare context for AI
+    chan_list = [{"id": c["id"], "name": c["name"], "type": c["type"]} for c in channels if c["type"] in [0, 5]]
+    role_list = [{"id": r["id"], "name": r["name"], "color": r["color"]} for r in roles if r["name"] != "@everyone" and not r.get("managed")]
+
+    system_instr = """You are a Discord AI Auditor.
+Analyze the provided lists of channels and roles. Map them to the following internal configuration keys based on their names and purpose.
+Keys to map:
+- welcome_channel: (Channel for welcome messages)
+- log_channel: (Channel for logs/audits)
+- rules_channel: (Channel for rules)
+- roles_channel: (Channel for role selection)
+- verification_channel: (Channel for newcomer verification)
+- leveling_channel: (Channel for level up alerts)
+- general_channel: (Main chat channel)
+- verified_role: (Role for verified members)
+- unverified_role: (Role for new members)
+- muted_role: (Role for muted users)
+
+Also, if a role has the default color (0), suggest a creative hex color that fits its name.
+
+OUTPUT FORMAT: Return ONLY a JSON object:
+{
+  "mappings": { "key": "id", ... },
+  "role_color_suggestions": [ {"id": "...", "suggested_color": "#hex"}, ... ],
+  "reasoning": "A very brief explanation of why you chose these."
+}
+"""
+
+    context_str = f"CHANNELS: {json.dumps(chan_list)}\nROLES: {json.dumps(role_list)}"
+    
+    try:
+        from brain import safe_generate_content, PRIMARY_MODEL, types
+        response = await safe_generate_content(
+            model="gemini-1.5-flash", # Use flash for raw speed
+            contents=f"{system_instr}\n\nSERVER CONTEXT:\n{context_str}\n\nOutput JSON:",
+            config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0.2)
+        )
+        
+        if not response or not response.text:
+            return {"status": "error", "error": "AI calculation timed out."}
+        
+        suggestions = json.loads(response.text)
+        return {"status": "success", "suggestions": suggestions}
+    except Exception as e:
+        logger.error(f"AI Suggest Error: {e}")
+        return {"status": "error", "error": str(e)}
+
+@app.post("/api/guilds/{guild_id}/apply-suggestions")
+async def apply_suggestions(guild_id: str, request: Request):
+    token = request.headers.get("X-Session-Token")
+    if not token or token not in SESSIONS: raise HTTPException(status_code=401)
+    
+    data = await request.json()
+    color_updates = data.get("color_updates", [])
+    
+    async with httpx.AsyncClient() as client:
+        for update in color_updates:
+            role_id = update.get("id")
+            hex_color = update.get("suggested_color", "0").replace("#", "")
+            if role_id and hex_color != "0":
+                try:
+                    color_int = int(hex_color, 16)
+                    # PATCH role color
+                    await client.patch(
+                        f"https://discord.com/api/v10/guilds/{guild_id}/roles/{role_id}",
+                        headers={"Authorization": f"Bot {BOT_TOKEN}"},
+                        json={"color": color_int}
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to update role color {role_id}: {e}")
+                    
+    return {"status": "success"}
+
 @app.post("/api/guilds/{guild_id}/ai-plan")
 async def ai_plan(guild_id: str, request: Request):
     token = request.headers.get("X-Session-Token")
@@ -326,34 +425,42 @@ async def trigger_action(guild_id: str, request: Request, token: str = None):
             chan_id = settings.get("roles_channel") or settings.get("role_request_channel")
             if not chan_id: return {"error": "Roles channel not set"}
             
-            ae_id, am_id = settings.get("ae_role", "0"), settings.get("am_role", "0")
-            cp_id, pr_id = settings.get("capcut_role", "0"), settings.get("pr_role", "0")
+            async with httpx.AsyncClient() as client:
+                # Fetch REAL roles from Discord to make it dynamic
+                r_res = await client.get(f"https://discord.com/api/v10/guilds/{guild_id}/roles", headers={"Authorization": f"Bot {BOT_TOKEN}"})
+                if r_res.status_code != 200: return {"error": "Failed to fetch guild roles"}
+                
+                all_roles = r_res.json()
+                # Filter out @everyone, bot roles, and managed roles
+                valid_roles = [r for r in all_roles if r["name"] != "@everyone" and not r.get("managed", False)]
+                # Take top 5 roles for the interactive menu (Discord limit per row)
+                display_roles = valid_roles[:5]
 
-            payload = {
-                "embeds": [{
-                    "title": "🎭 PRIME // ROLE SELECTION",
-                    "description": (
-                        "Select your specializations below to unlock optimized channels.\n\n"
-                        f"⚡ <@&{ae_id}>\n✨ <@&{am_id}>\n📱 <@&{cp_id}>\n🎬 <@&{pr_id}>\n\n"
-                        "*Click buttons to toggle access.*"
-                    ),
-                    "color": 11468718 # Blurple
-                }],
-                "components": [
-                    {
-                        "type": 1,
-                        "components": [
-                            {"type": 2, "style": 2, "label": "AE", "custom_id": "role_ae"},
-                            {"type": 2, "style": 2, "label": "AM", "custom_id": "role_am"},
-                            {"type": 2, "style": 2, "label": "CAPCUT", "custom_id": "role_capcut"},
-                            {"type": 2, "style": 2, "label": "PR", "custom_id": "role_pr"}
-                        ]
-                    }
-                ]
-            }
-            res = await client.post(f"https://discord.com/api/v10/channels/{chan_id}/messages", 
-                                   headers={"Authorization": f"Bot {BOT_TOKEN}"}, json=payload)
-            return {"status": "success", "message": "DONE!"} if res.status_code == 200 else {"status": "failed"}
+                role_mentions = "\n".join([f"✨ <@&{r['id']}> - {r['name']}" for r in display_roles])
+                
+                payload = {
+                    "embeds": [{
+                        "title": "🎭 COMMUNITY SECTORS",
+                        "description": (
+                            "Select your sectors below to unlock restricted access and specialized channels.\n\n"
+                            f"{role_mentions}\n\n"
+                            "*Click buttons to toggle access.*"
+                        ),
+                        "color": 11468718 # Blurple
+                    }],
+                    "components": [
+                        {
+                            "type": 1,
+                            "components": [
+                                {"type": 2, "style": 2, "label": r["name"][:32], "custom_id": f"role_{r['id']}"} 
+                                for r in display_roles
+                            ]
+                        }
+                    ]
+                }
+                res = await client.post(f"https://discord.com/api/v10/channels/{chan_id}/messages", 
+                                       headers={"Authorization": f"Bot {BOT_TOKEN}"}, json=payload)
+                return {"status": "success", "message": "DONE!"} if res.status_code == 200 else {"status": "failed"}
 
     return {"error": "Invalid action"}
 

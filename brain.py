@@ -79,13 +79,21 @@ async def safe_generate_content(model, contents, config=None):
             if config is None:
                 config = types.GenerateContentConfig(temperature=1.0)
 
-            # Use asyncio.to_thread to prevent blocking the event loop on network I/O
-            return await asyncio.to_thread(
-                gemini_client.models.generate_content,
-                model=model,
-                contents=contents,
-                config=config
+            # Use asyncio.wait_for to prevent hangups
+            return await asyncio.wait_for(
+                asyncio.to_thread(
+                    gemini_client.models.generate_content,
+                    model=model,
+                    contents=contents,
+                    config=config
+                ),
+                timeout=25.0 # Increased timeout for stability
             )
+        except asyncio.TimeoutError:
+            logger.error(f"⌛ BRAIN: Timeout on model {model}")
+            last_err = Exception("AI request timed out. Please try again.")
+            if rotate_gemini_key(): continue
+            break
         except Exception as e:
             last_err = e
             if rotate_gemini_key():

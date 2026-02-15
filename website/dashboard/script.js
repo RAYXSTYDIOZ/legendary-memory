@@ -158,20 +158,14 @@ const Dashboard = {
                 document.getElementById('mCfgUnverifiedRole').value = s.unverified_role || '';
                 document.getElementById('mCfgMutedRole').value = s.muted_role || '';
 
-                // SOFTWARE
-                document.getElementById('mCfgAeRole').value = s.ae_role || '';
-                document.getElementById('mCfgAmRole').value = s.am_role || '';
-                document.getElementById('mCfgCapcutRole').value = s.capcut_role || '';
-                document.getElementById('mCfgPrRole').value = s.pr_role || '';
-                document.getElementById('mCfgPsRole').value = s.ps_role || '';
-
                 // ADVANCED
                 document.getElementById('mCfgAesthetic').value = s.aesthetic_overlay || '';
                 document.getElementById('mCfgPrompt').value = s.custom_system_prompt || '';
                 document.getElementById('mCfgRoleChan').value = s.roles_channel || '';
 
-                // Fetch Roles for suggestions
+                // Fetch context
                 this.fetchRoles(guild.id);
+                this.fetchChannels(guild.id);
             }
         } catch (e) { }
     },
@@ -183,7 +177,17 @@ const Dashboard = {
             });
             if (res.ok) {
                 this.currentRoles = await res.json();
-                console.log("Fetched Roles:", this.currentRoles);
+            }
+        } catch (e) { }
+    },
+
+    async fetchChannels(guildId) {
+        try {
+            const res = await fetch(`/api/guilds/${guildId}/channels`, {
+                headers: { 'X-Session-Token': this.token }
+            });
+            if (res.ok) {
+                this.currentChannels = await res.json();
             }
         } catch (e) { }
     },
@@ -285,11 +289,6 @@ async function saveActiveSettings() {
         verified_role: document.getElementById('mCfgVerifiedRole').value,
         unverified_role: document.getElementById('mCfgUnverifiedRole').value,
         muted_role: document.getElementById('mCfgMutedRole').value,
-        ae_role: document.getElementById('mCfgAeRole').value,
-        am_role: document.getElementById('mCfgAmRole').value,
-        capcut_role: document.getElementById('mCfgCapcutRole').value,
-        pr_role: document.getElementById('mCfgPrRole').value,
-        ps_role: document.getElementById('mCfgPsRole').value,
         aesthetic_overlay: document.getElementById('mCfgAesthetic').value,
         custom_system_prompt: document.getElementById('mCfgPrompt').value,
         roles_channel: document.getElementById('mCfgRoleChan').value
@@ -406,35 +405,115 @@ async function executeAiBuild() {
     }
 }
 
-async function suggestRoles() {
-    if (!Dashboard.currentRoles || Dashboard.currentRoles.length === 0) {
-        const btn = event.target;
-        btn.textContent = "SCANNING...";
-        await Dashboard.fetchRoles(Dashboard.activeGuild.id);
-        btn.textContent = "AI SUGGEST";
+async function aiAutoLink() {
+    if (!Dashboard.activeGuild) return;
+    const btn = event.target;
+    const oldText = btn.innerHTML;
+    btn.innerHTML = "<i class='fas fa-spinner fa-spin'></i> AI AUDITING SERVER...";
+    btn.disabled = true;
+
+    try {
+        const res = await fetch(`/api/guilds/${Dashboard.activeGuild.id}/ai-suggest`, {
+            method: 'POST',
+            headers: { 'X-Session-Token': Dashboard.token }
+        });
+        const data = await res.json();
+
+        if (data.status === "success") {
+            const sug = data.suggestions;
+            Dashboard.activeSuggestions = sug;
+
+            // Show Modal
+            document.getElementById('aiSuggestModal').classList.add('active');
+            document.getElementById('aiReasoning').textContent = sug.reasoning;
+
+            const list = document.getElementById('aiSuggestList');
+            let html = "";
+
+            // Render Mappings
+            for (const [key, id] of Object.entries(sug.mappings)) {
+                if (!id) continue;
+                html += `
+                    <div class="plan-item">
+                        <b>${key.replace('_', ' ')}</b>
+                        <span>Detected ID: ${id}</span>
+                    </div>
+                `;
+            }
+
+            // Render Colors
+            if (sug.role_color_suggestions && sug.role_color_suggestions.length > 0) {
+                html += `<h4 style="margin: 1.5rem 0 0.5rem 0; font-size: 0.7rem; opacity: 0.5;">AESTHETIC UPGRADES</h4>`;
+                sug.role_color_suggestions.forEach(c => {
+                    html += `
+                        <div class="plan-item">
+                            <b>ROLE COLOR</b>
+                            <span style="color: ${c.suggested_color}">${c.suggested_color} (Suggested)</span>
+                        </div>
+                    `;
+                });
+            }
+
+            list.innerHTML = html;
+        } else {
+            alert("AI Auditor Busy: " + (data.error || "Try again later."));
+        }
+    } catch (e) {
+        alert("Signals interrupted. Check connection.");
     }
 
-    const roles = Dashboard.currentRoles;
-    const mappings = {
-        'mCfgAeRole': ['ae', 'after effects', 'vfx'],
-        'mCfgAmRole': ['am', 'alight motion'],
-        'mCfgCapcutRole': ['capcut', 'mobile'],
-        'mCfgPrRole': ['pr', 'premiere'],
-        'mCfgPsRole': ['ps', 'photoshop']
+    btn.innerHTML = oldText;
+    btn.disabled = false;
+}
+
+function closeSuggestModal() {
+    document.getElementById('aiSuggestModal').classList.remove('active');
+}
+
+function applyAiSuggestions() {
+    const sug = Dashboard.activeSuggestions;
+    if (!sug) return;
+
+    const idMap = {
+        'welcome_channel': 'mCfgWelcomeChan',
+        'log_channel': 'mCfgLogChan',
+        'rules_channel': 'mCfgRulesChan',
+        'roles_channel': 'mCfgRoleChan',
+        'verification_channel': 'mCfgVerifyChan',
+        'leveling_channel': 'mCfgLevelChan',
+        'general_channel': 'mCfgGeneralChan',
+        'verified_role': 'mCfgVerifiedRole',
+        'unverified_role': 'mCfgUnverifiedRole',
+        'muted_role': 'mCfgMutedRole'
     };
 
-    let foundCount = 0;
-    for (const [fieldId, keywords] of Object.entries(mappings)) {
-        const match = roles.find(r => keywords.some(k => r.name.toLowerCase().includes(k)));
-        if (match) {
-            document.getElementById(fieldId).value = match.id;
-            foundCount++;
+    let appliedCount = 0;
+    for (const [key, val] of Object.entries(sug.mappings)) {
+        const fieldId = idMap[key];
+        if (fieldId && val) {
+            const el = document.getElementById(fieldId);
+            if (el) {
+                el.value = val;
+                el.style.borderColor = "var(--p)";
+                setTimeout(() => el.style.borderColor = "", 3000);
+                appliedCount++;
+            }
         }
     }
 
-    if (foundCount > 0) {
-        alert(`Successfully mapped ${foundCount} roles based on server scanning!`);
-    } else {
-        alert("No clear matches found. You can try using the AI Architect to create these roles for you first.");
+    closeSuggestModal();
+
+    // Apply colors via backend
+    if (sug.role_color_suggestions && sug.role_color_suggestions.length > 0) {
+        fetch(`/api/guilds/${Dashboard.activeGuild.id}/apply-suggestions`, {
+            method: 'POST',
+            headers: {
+                'X-Session-Token': Dashboard.token,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ color_updates: sug.role_color_suggestions })
+        });
     }
+
+    alert(`Applied ${appliedCount} configurations. Any role color updates are being processed in the background. Click SYNC ALL CHANGES to save.`);
 }

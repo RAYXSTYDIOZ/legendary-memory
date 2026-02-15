@@ -102,6 +102,8 @@
                             <p id="custSub">Configure your bot behavior and channel mappings</p>
                         </div>
                         <div class="cust-actions">
+                            <button type="button" class="btn-sync-top btn-ai" onclick="aiAutoLink()"><i
+                                    class="fas fa-magic"></i> AI AUTO-LINK SYSTEM</button>
                             <button type="button" class="btn-sync-top" onclick="saveActiveSettings()">SYNC ALL
                                 CHANGES</button>
                         </div>
@@ -215,30 +217,20 @@
                                     </div>
 
                                     <div class="cust-section">
-                                        <h4><i class="fas fa-video"></i> EDITOR ROLES</h4>
+                                        <h4><i class="fas fa-users"></i> COMMUNITY ROLES</h4>
                                         <div class="field">
-                                            <label>ROLES CHANNEL (ID)</label>
+                                            <label>ROLES SELECTION CHANNEL (ID)</label>
                                             <div class="input-group">
                                                 <input type="text" id="mCfgRoleChan" placeholder="1234...">
-                                                <button type="button" class="btn-trigger" onclick="suggestRoles()">AI
-                                                    SUGGEST</button>
                                             </div>
                                         </div>
                                         <div class="setup-bar">
                                             <button type="button" class="btn-trigger-wide"
-                                                onclick="triggerAction('roles')">SEND ROLE SELECTION MESSAGE</button>
+                                                onclick="triggerAction('roles')">SEND INTERACTIVE ROLE MENU</button>
                                         </div>
-                                        <div class="cust-subgrid">
-                                            <div class="field"><label>AE</label><input type="text" id="mCfgAeRole"
-                                                    placeholder="ID"></div>
-                                            <div class="field"><label>AM</label><input type="text" id="mCfgAmRole"
-                                                    placeholder="ID"></div>
-                                            <div class="field"><label>CAPCUT</label><input type="text"
-                                                    id="mCfgCapcutRole" placeholder="ID"></div>
-                                            <div class="field"><label>PR</label><input type="text" id="mCfgPrRole"
-                                                    placeholder="ID"></div>
-                                            <div class="field"><label>PS</label><input type="text" id="mCfgPsRole"
-                                                    placeholder="ID"></div>
+                                        <div class="arch-warning" style="margin-top: 1rem;">
+                                            <i class="fas fa-info-circle"></i>
+                                            <span>The bot will detect your roles automatically for the menu.</span>
                                         </div>
                                     </div>
                                 </div>
@@ -407,6 +399,25 @@
                 </div>
                 <button type="submit" class="btn-save">SYNC CHANGES</button>
             </form>
+        </div>
+    </div>
+
+    <!-- AI SUGGESTION MODAL -->
+    <div id="aiSuggestModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-head">
+                <h3><i class="fas fa-magic"></i> AI ARCHITECT SUGGESTIONS</h3>
+                <button class="close" onclick="closeSuggestModal()">&times;</button>
+            </div>
+            <div class="modal-scroll" id="suggestScroll">
+                <p id="aiReasoning" style="opacity: 0.6; font-size: 0.8rem; margin-bottom: 2rem; color: var(--p);"></p>
+                <div id="aiSuggestList" class="plan-list">
+                    <!-- Suggested mappings will appear here -->
+                </div>
+            </div>
+            <div class="modal-footer" style="padding-top: 2rem;">
+                <button class="btn-save" onclick="applyAiSuggestions()">AUTHORIZE & SYNC CONFIG</button>
+            </div>
         </div>
     </div>
 
