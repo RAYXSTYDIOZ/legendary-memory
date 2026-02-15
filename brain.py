@@ -25,7 +25,6 @@ logger = logging.getLogger('prime_brain')
 # --- CONFIGURATION ---
 PRIMARY_MODEL = "gemini-3-flash-preview"
 FALLBACK_MODEL = "gemini-3-flash-preview"
-GROK_MODEL = "grok-4-1-fast-non-reasoning"
 SECRET_LOG_CHANNEL_ID = int(os.getenv("SECRET_LOG_CHANNEL_ID", "0"))
 
 # --- API KEY MANAGEMENT ---
@@ -87,7 +86,7 @@ async def safe_generate_content(model, contents, config=None):
                     contents=contents,
                     config=config
                 ),
-                timeout=25.0 # Increased timeout for stability
+                timeout=45.0 # Increased timeout for heavy audits
             )
         except asyncio.TimeoutError:
             logger.error(f"⌛ BRAIN: Timeout on model {model}")
@@ -197,76 +196,6 @@ Your task is to break down complex problems into strategic phases.
 - Suggest the most efficient path forward.
 - Tone: Strategic, analytical, and confident."""
 
-# --- GROK (xAI) INTEGRATION ---
-async def get_grok_response(prompt, user_id, username=None, system_prompt=None, guild_id=None):
-    if not XAI_API_KEY:
-        return None
-    
-    try:
-        # 1. Load User Memory
-        user_memory = db_manager.get_user_memory(user_id)
-        memory_context = ""
-        if user_memory:
-            vibe = user_memory.get("vibe", "neutral")
-            profile = user_memory.get("profile_summary", "")
-            memory_context = f"\n\n[USER MEMORY: '{vibe}'. Profile: {profile}]"
-            
-        # 2. Check for Overlay
-        overlay_context = ""
-        if guild_id:
-            aesthetic = db_manager.get_guild_setting(guild_id, "aesthetic_overlay")
-            if aesthetic:
-                overlay_context = f"\n\n[SERVER AESTHETIC OVERLAY: {aesthetic.upper()}]"
-
-        final_system = f"{system_prompt if system_prompt else PRIME_SYSTEM_PROMPT}{memory_context}{overlay_context}"
-        
-        # 3. Build Messages (History + Current)
-        history = db_manager.get_history(user_id, limit=10)
-        messages = [{"role": "system", "content": final_system}]
-        
-        # Add history
-        for msg in history:
-            role = "user" if msg['role'] == 'user' else "assistant"
-            messages.append({"role": role, "content": msg['parts'][0]['text']})
-        
-        # Add current prompt
-        messages.append({"role": "user", "content": prompt})
-
-        # 4. Call xAI API
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://api.x.ai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {XAI_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": GROK_MODEL,
-                    "messages": messages,
-                    "temperature": 0.8
-                },
-                timeout=60.0
-            )
-            
-            if response.status_code == 200:
-                res_data = response.json()
-                result_text = res_data['choices'][0]['message']['content']
-                
-                # Save to history
-                db_manager.save_message(user_id, "user", prompt)
-                db_manager.save_message(user_id, "model", result_text)
-                
-                # Reflect in background
-                asyncio.create_task(reflect_on_user(user_id, username, prompt, result_text))
-                
-                return result_text
-            else:
-                logger.error(f"Grok API Error: {response.status_code} - {response.text}")
-                return None
-    except Exception as e:
-        logger.error(f"Grok Execution Error: {e}")
-        return None
-
 # --- CORE AI FUNCTION ---
 async def get_gemini_response(prompt, user_id, username=None, image_bytes=None, is_tutorial=False, software=None, brief=False, model=None, mode=None, use_thought=False, guild_id=None):
     try:
@@ -312,14 +241,6 @@ async def get_gemini_response(prompt, user_id, username=None, image_bytes=None, 
             # we just prepend it and then we'll strip it or just rely on the model's self-instruction.
             modified_system_prompt = f"System Instruction: You have a specialized thinking module. Before answering, analyze the context and the user's intent thoroughly.\n\n{modified_system_prompt}"
 
-        # --- GROK ROUTING (FAST CHAT) ---
-        # Route to Grok if: No image, no specified model, and Grok is available
-        if not image_bytes and not model and not mode and XAI_API_KEY:
-            logger.info(f"🚀 Routing chat request for {username} to Grok ({GROK_MODEL})")
-            grok_res = await get_grok_response(user_question, user_id, username=username, system_prompt=modified_system_prompt, guild_id=guild_id)
-            if grok_res:
-                return grok_res
-            logger.warning("Grok failed, falling back to Gemini.")
 
         if image_bytes:
             image_prompt = f"{modified_system_prompt}{user_context}\n\nAnalyze this image.\n\nUser's message: {user_question}"

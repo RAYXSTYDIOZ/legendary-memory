@@ -94,7 +94,7 @@ else:
 
 # --- GLOBAL SETTINGS ---
 PRIMARY_MODEL = "gemini-3-flash-preview"
-FALLBACK_MODEL = "gemini-1.5-flash"
+FALLBACK_MODEL = "gemini-3-flash-preview"
 SECRET_LOG_CHANNEL_ID = get_env_int("SECRET_LOG_CHANNEL_ID", 1456312201974644776)
 
 # Emoji IDs (Used for UI buttons)
