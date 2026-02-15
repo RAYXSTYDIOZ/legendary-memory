@@ -21,24 +21,30 @@ import brain
 
 load_dotenv()
 
-# Config
-CLIENT_ID = os.getenv("DISCORD_CLIENT_ID", "")
-CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET", "")
-BOT_TOKEN = os.getenv("DISCORD_TOKEN", "")
-REDIRECT_URI = os.getenv("DISCORD_REDIRECT_URI", "http://localhost:8000/callback")
+# Configuration Audit & Sanitization
+def get_env_safe(key, default=""):
+    val = os.getenv(key, default).strip().replace('"', '').replace("'", "")
+    if val:
+        # Log masked version for safety and verification
+        logger.info(f"✅ CONFIG: Loaded {key} ({val[:4]}...{val[-4:]})")
+    else:
+        logger.error(f"❌ CONFIG: Variable {key} is MISSING or EMPTY!")
+    return val
+
+CLIENT_ID = get_env_safe("DISCORD_CLIENT_ID")
+CLIENT_SECRET = get_env_safe("DISCORD_CLIENT_SECRET")
+BOT_TOKEN = get_env_safe("DISCORD_TOKEN")
+REDIRECT_URI = get_env_safe("DISCORD_REDIRECT_URI", "http://localhost:8000/callback")
+
+if not CLIENT_ID or not BOT_TOKEN:
+    print("\n" + "!"*60)
+    print("CRITICAL CONFIG ERROR: Your Discord Client ID or Bot Token is missing.")
+    print("Please check your Railway Variables tab immediately!")
+    print("!"*60 + "\n")
 
 # SERVER-SIDE STORAGE
 SESSIONS = {}
 BOT_GUILDS = set()
-
-# Configuration Audit
-REQUIRED_KEYS = ["DISCORD_CLIENT_ID", "DISCORD_CLIENT_SECRET", "DISCORD_TOKEN", "GEMINI_KEY"]
-missing = [k for k in REQUIRED_KEYS if not os.getenv(k)]
-if missing:
-    print("\n" + "!"*60)
-    print(f"CRITICAL CONFIG ERROR: Missing variables: {', '.join(missing)}")
-    print("Ensure these are added to your Railway Variables tab!")
-    print("!"*60 + "\n")
 
 app = FastAPI()
 
