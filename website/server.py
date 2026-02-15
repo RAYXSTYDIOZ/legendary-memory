@@ -177,6 +177,15 @@ async def get_settings(guild_id: str, request: Request):
     settings = db_manager.get_guild_setting(guild_id, "all_settings", {"prefix": "!", "vibe": "helpful"})
     return settings
 
+@app.get("/api/guilds/{guild_id}/roles")
+async def get_roles(guild_id: str, request: Request):
+    token = request.headers.get("X-Session-Token")
+    if not token or token not in SESSIONS: raise HTTPException(status_code=401)
+    async with httpx.AsyncClient() as client:
+        res = await client.get(f"https://discord.com/api/v10/guilds/{guild_id}/roles", headers={"Authorization": f"Bot {BOT_TOKEN}"})
+        if res.status_code == 200: return res.json()
+    return []
+
 # AI ARCHITECT (High Priority Routes)
 @app.post("/api/guilds/{guild_id}/ai-plan")
 async def ai_plan(guild_id: str, request: Request):
@@ -195,13 +204,14 @@ Interpret the user's request and output a JSON list of actions to structure thei
 Valid Actions:
 - {"action": "create_category", "name": "..."}
 - {"action": "create_channel", "name": "...", "type": "text|voice", "category": "..."}
-- {"action": "create_role", "name": "...", "color": "hex_code"}
+- {"action": "create_role", "name": "...", "color": "hex_code", "icon": "emoji"}
 
 RULES:
 1. Only return the JSON list. No explanation.
 2. If a category is mentioned for a channel, ensure you create_category first.
-3. Keep names professional.
-4. Limit to max 12 actions.
+3. Be CREATIVE with icons/emojis for roles based on the user's suggestion.
+4. If the user mentions a color (e.g. 'navy blue'), find the hex code.
+5. Limit to max 12 actions per plan.
 """
 
     try:
@@ -258,10 +268,13 @@ async def ai_execute(guild_id: str, request: Request):
                 res = await client.post(f"https://discord.com/api/v10/guilds/{guild_id}/channels", headers=headers, json=payload)
                 if res.status_code == 201: results.append(f"Created channel: {name}")
             elif action == "create_role":
+                name = task.get("name")
+                icon = task.get("icon", "")
+                full_name = f"{icon} {name}".strip() if icon else name
                 color_hex = task.get("color", "0").replace("#", "")
                 color_int = int(color_hex, 16) if color_hex != "0" else 0
-                res = await client.post(f"https://discord.com/api/v10/guilds/{guild_id}/roles", headers=headers, json={"name": name, "color": color_int})
-                if res.status_code in [200, 201]: results.append(f"Created role: {name}")
+                res = await client.post(f"https://discord.com/api/v10/guilds/{guild_id}/roles", headers=headers, json={"name": full_name, "color": color_int})
+                if res.status_code in [200, 201]: results.append(f"Created role: {full_name}")
     return {"status": "success", "results": results}
 
 @app.post("/api/guilds/{guild_id}/settings")
@@ -307,50 +320,40 @@ async def trigger_action(guild_id: str, request: Request, token: str = None):
             }
             res = await client.post(f"https://discord.com/api/v10/channels/{chan_id}/messages", 
                                    headers={"Authorization": f"Bot {BOT_TOKEN}"}, json=payload)
-            return {"status": "success" if res.status_code == 200 else "failed", "code": res.status_code}
+            return {"status": "success", "message": "DONE!"} if res.status_code == 200 else {"status": "failed"}
 
         if action == "roles":
-            chan_id = settings.get("role_request_channel")
-            if not chan_id: return {"error": "Role request channel not set"}
+            chan_id = settings.get("roles_channel") or settings.get("role_request_channel")
+            if not chan_id: return {"error": "Roles channel not set"}
             
-            ae_id = settings.get("ae_role", "0")
-            am_id = settings.get("am_role", "0")
-            cp_id = settings.get("capcut_role", "0")
-            pr_id = settings.get("pr_role", "0")
-            ps_id = settings.get("ps_role", "0")
+            ae_id, am_id = settings.get("ae_role", "0"), settings.get("am_role", "0")
+            cp_id, pr_id = settings.get("capcut_role", "0"), settings.get("pr_role", "0")
 
             payload = {
                 "embeds": [{
-                    "title": "🎬 SOFTWARE ROLES",
+                    "title": "🎭 PRIME // ROLE SELECTION",
                     "description": (
-                        "Assign yourself software roles to access specialized channels!\n\n"
-                        f"🔹 <@&{ae_id}>\n🔹 <@&{am_id}>\n🔹 <@&{cp_id}>\n🔹 <@&{pr_id}>\n🔹 <@&{ps_id}>\n\n"
-                        "Click the buttons below to toggle roles."
+                        "Select your specializations below to unlock optimized channels.\n\n"
+                        f"⚡ <@&{ae_id}>\n✨ <@&{am_id}>\n📱 <@&{cp_id}>\n🎬 <@&{pr_id}>\n\n"
+                        "*Click buttons to toggle access.*"
                     ),
-                    "color": 3447003 # Blue
+                    "color": 11468718 # Blurple
                 }],
                 "components": [
                     {
                         "type": 1,
                         "components": [
-                            {"type": 2, "style": 2, "label": "After Effects", "custom_id": "role_ae"},
-                            {"type": 2, "style": 2, "label": "Alight Motion", "custom_id": "role_am"},
-                            {"type": 2, "style": 2, "label": "Capcut", "custom_id": "role_capcut"},
-                            {"type": 2, "style": 2, "label": "Premiere Pro", "custom_id": "role_pr"},
-                            {"type": 2, "style": 2, "label": "Photoshop", "custom_id": "role_ps"}
-                        ]
-                    },
-                    {
-                        "type": 1,
-                        "components": [
-                            {"type": 2, "style": 2, "label": "Giveaway Pings", "custom_id": "role_giveaway", "emoji": {"name": "🎉"}}
+                            {"type": 2, "style": 2, "label": "AE", "custom_id": "role_ae"},
+                            {"type": 2, "style": 2, "label": "AM", "custom_id": "role_am"},
+                            {"type": 2, "style": 2, "label": "CAPCUT", "custom_id": "role_capcut"},
+                            {"type": 2, "style": 2, "label": "PR", "custom_id": "role_pr"}
                         ]
                     }
                 ]
             }
             res = await client.post(f"https://discord.com/api/v10/channels/{chan_id}/messages", 
                                    headers={"Authorization": f"Bot {BOT_TOKEN}"}, json=payload)
-            return {"status": "success" if res.status_code == 200 else "failed", "code": res.status_code}
+            return {"status": "success", "message": "DONE!"} if res.status_code == 200 else {"status": "failed"}
 
     return {"error": "Invalid action"}
 

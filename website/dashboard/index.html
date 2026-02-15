@@ -129,6 +129,8 @@
                                 </div>
                                 <button type="button" class="btn-arch" style="margin-top: 1.5rem;"
                                     onclick="executeAiBuild()">EXECUTE APPROVED BUILD</button>
+                                <button type="button" class="btn-arch btn-ghost" style="margin-top: 0.5rem;"
+                                    onclick="triggerAiBuild()">RE-GENERATE PLAN</button>
                             </div>
                             <div class="arch-warning">
                                 <i class="fas fa-triangle-exclamation"></i>
@@ -214,6 +216,14 @@
 
                                     <div class="cust-section">
                                         <h4><i class="fas fa-video"></i> EDITOR ROLES</h4>
+                                        <div class="field">
+                                            <label>ROLES CHANNEL (ID)</label>
+                                            <div class="input-group">
+                                                <input type="text" id="mCfgRoleChan" placeholder="1234...">
+                                                <button type="button" class="btn-trigger" onclick="suggestRoles()">AI
+                                                    SUGGEST</button>
+                                            </div>
+                                        </div>
                                         <div class="setup-bar">
                                             <button type="button" class="btn-trigger-wide"
                                                 onclick="triggerAction('roles')">SEND ROLE SELECTION MESSAGE</button>

@@ -168,6 +168,22 @@ const Dashboard = {
                 // ADVANCED
                 document.getElementById('mCfgAesthetic').value = s.aesthetic_overlay || '';
                 document.getElementById('mCfgPrompt').value = s.custom_system_prompt || '';
+                document.getElementById('mCfgRoleChan').value = s.roles_channel || '';
+
+                // Fetch Roles for suggestions
+                this.fetchRoles(guild.id);
+            }
+        } catch (e) { }
+    },
+
+    async fetchRoles(guildId) {
+        try {
+            const res = await fetch(`/api/guilds/${guildId}/roles`, {
+                headers: { 'X-Session-Token': this.token }
+            });
+            if (res.ok) {
+                this.currentRoles = await res.json();
+                console.log("Fetched Roles:", this.currentRoles);
             }
         } catch (e) { }
     },
@@ -275,7 +291,8 @@ async function saveActiveSettings() {
         pr_role: document.getElementById('mCfgPrRole').value,
         ps_role: document.getElementById('mCfgPsRole').value,
         aesthetic_overlay: document.getElementById('mCfgAesthetic').value,
-        custom_system_prompt: document.getElementById('mCfgPrompt').value
+        custom_system_prompt: document.getElementById('mCfgPrompt').value,
+        roles_channel: document.getElementById('mCfgRoleChan').value
     };
 
     try {
@@ -328,7 +345,7 @@ async function triggerAiBuild() {
 
             list.innerHTML = data.plan.map(item => `
                 <div class="plan-item">
-                    <b>${item.action.replace('create_', '')}</b>
+                    <b style="color: ${item.color || 'var(--p)'}">${item.icon || '🛠️'} ${item.action.replace('create_', '')}</b>
                     <span>${item.name} ${item.type ? `(${item.type})` : ''}</span>
                 </div>
             `).join('');
@@ -368,7 +385,8 @@ async function executeAiBuild() {
         const data = await res.json();
 
         if (data.status === "success") {
-            btn.textContent = "ARCHITECTED SUCCESSFULLY";
+            btn.textContent = "✓ ACTION COMPLETE - IT'S DONE!";
+            btn.style.color = "#00ffaa";
             document.getElementById('aiArchPrompt').value = "";
             setTimeout(() => {
                 document.getElementById('aiArchPlanReview').style.display = 'none';
@@ -385,5 +403,38 @@ async function executeAiBuild() {
             btn.textContent = oldText;
         }, 3000);
         alert(e.message);
+    }
+}
+
+async function suggestRoles() {
+    if (!Dashboard.currentRoles || Dashboard.currentRoles.length === 0) {
+        const btn = event.target;
+        btn.textContent = "SCANNING...";
+        await Dashboard.fetchRoles(Dashboard.activeGuild.id);
+        btn.textContent = "AI SUGGEST";
+    }
+
+    const roles = Dashboard.currentRoles;
+    const mappings = {
+        'mCfgAeRole': ['ae', 'after effects', 'vfx'],
+        'mCfgAmRole': ['am', 'alight motion'],
+        'mCfgCapcutRole': ['capcut', 'mobile'],
+        'mCfgPrRole': ['pr', 'premiere'],
+        'mCfgPsRole': ['ps', 'photoshop']
+    };
+
+    let foundCount = 0;
+    for (const [fieldId, keywords] of Object.entries(mappings)) {
+        const match = roles.find(r => keywords.some(k => r.name.toLowerCase().includes(k)));
+        if (match) {
+            document.getElementById(fieldId).value = match.id;
+            foundCount++;
+        }
+    }
+
+    if (foundCount > 0) {
+        alert(`Successfully mapped ${foundCount} roles based on server scanning!`);
+    } else {
+        alert("No clear matches found. You can try using the AI Architect to create these roles for you first.");
     }
 }
