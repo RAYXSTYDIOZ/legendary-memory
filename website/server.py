@@ -246,7 +246,7 @@ OUTPUT FORMAT: Return ONLY a JSON object:
     try:
         from brain import safe_generate_content, PRIMARY_MODEL, types
         response = await safe_generate_content(
-            model="gemini-1.5-flash", # Use flash for raw speed
+            model=PRIMARY_MODEL, 
             contents=f"{system_instr}\n\nSERVER CONTEXT:\n{context_str}\n\nOutput JSON:",
             config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0.2)
         )
