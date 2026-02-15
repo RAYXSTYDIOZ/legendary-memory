@@ -38,7 +38,17 @@ def get_env_safe(key, default=""):
 CLIENT_ID = get_env_safe("DISCORD_CLIENT_ID")
 CLIENT_SECRET = get_env_safe("DISCORD_CLIENT_SECRET")
 BOT_TOKEN = get_env_safe("DISCORD_TOKEN")
-REDIRECT_URI = get_env_safe("DISCORD_REDIRECT_URI", "http://localhost:8000/callback")
+REDIRECT_URI = get_env_safe("DISCORD_REDIRECT_URI")
+
+# Smart Detection for Railway
+if not REDIRECT_URI:
+    railway_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN")
+    if railway_domain:
+        REDIRECT_URI = f"https://{railway_domain}/callback"
+        logger.info(f"✨ AUTO-DETECT: Using Railway domain for redirect: {REDIRECT_URI}")
+    else:
+        REDIRECT_URI = "http://localhost:8000/callback"
+        logger.warning("⚠️ CONFIG: No REDIRECT_URI found, defaulting to localhost.")
 
 if not CLIENT_ID or not BOT_TOKEN:
     print("\n" + "!"*60)
