@@ -3831,7 +3831,7 @@ async def on_message(message):
 
         # *** ROAST HANDLER ***
         # If user asks to roast someone else, ping them directly instead of replying to author
-        if 'roast' in prompt_lower or 'cook' in prompt_lower:
+        if 'roast' in prompt_lower:
             target_to_roast = next((m for m in message.mentions if m.id != bot.user.id), None)
             if target_to_roast:
                 async with message.channel.typing():
