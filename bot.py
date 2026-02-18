@@ -3775,8 +3775,11 @@ async def on_message(message):
         is_mentioned = bot.user.mentioned_in(message)
         
         # *** TUTORIALS & HELP - PRIORITY #4 ***
-        is_help = any(word in prompt_lower for word in ['help', 'tutorial', 'how to', 'teach', 'guide', 'learn', 'explain', 'show me', 'assist', 'how do i', 'how can i', 'how do you', 'create', 'make', 'do', 'show me'])
-        is_editing_help = is_help and any(keyword in prompt_lower for keyword in ['edit', 'effect', 'render', 'color', 'grade', 'video', 'after effects', 'premiere', 'photoshop', 'resolve', 'capcut', 'topaz', 'cc', 'grading', 'correction', 'effects', 'transition', 'animation', 'vfx', 'motion'])
+        help_words = ['help', 'tutorial', 'how to', 'teach', 'guide', 'learn', 'explain', 'show me', 'assist', 'how do i', 'how can i', 'how do you', 'create', 'make', 'how do', 'show me']
+        is_help = any(re.search(r'\b' + re.escape(word) + r'\b', prompt_lower) for word in help_words)
+        
+        editing_kws = ['edit', 'effect', 'render', 'color', 'grade', 'video', 'after effects', 'premiere', 'photoshop', 'resolve', 'capcut', 'topaz', 'cc', 'grading', 'correction', 'effects', 'transition', 'animation', 'vfx', 'motion']
+        is_editing_help = is_help and any(re.search(r'\b' + re.escape(kw) + r'\b', prompt_lower) for word in editing_kws)
         
         # PRIORITY: If this is editing help, ALWAYS ask which software FIRST before generating anything
         if is_editing_help:

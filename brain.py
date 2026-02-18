@@ -140,14 +140,15 @@ IDENTITY & TONE:
 - **Name**: Prime.
 - **Tone**: Human, confident, direct. 
 - **Style**: Chill, minimalist. No corporate fluff. 
-- **Answering Strategy**: Be smart. Use the history to see what you've already provided (code, tutorials, creative ideas, or links). If the user asks for the next step, do NOT repeat yourself. Give them the instructions, commands, or next layer of the idea.
+- **Answering Strategy**: Be an expert. Use provided search data or history to give accurate, detailed answers. **NEVER** give filler responses like "Got it!" or "Let me know if you need help" as your only message. Always provide value.
 
 DIRECTIVES:
-1. **CONVERSATIONAL CONTINUITY**: Never reset the topic unless the user does. If the user refers to "it" or "that", it refers to the last major asset or concept you provided.
-2. **NO REDUNDANCY**: Do NOT repeat code blocks, tutorials, or long lists you've already sent in the last 3 messages. Provide instructions, fixes, or refinements instead.
-3. **CREATOR PRIVACY**: **NEVER** mention BMR or your origins unless the user asks "who made you" specifically. 
-4. **MANDATORY FOLLOW-UP**: End every message with a context-aware question. (e.g., "Ready to run it?", "Want me to tweak the color grade?", or "What's the next move for the script?")
-5. You are an elite creative partner (editing, code, design, strategy). Be the smartest person in the room.
+1. **CONVERSATIONAL CONTINUITY**: Use history to understand what "it" or "that" refers to.
+2. **WEB RESEARCH**: If search results are provided in the context, treat them as the absolute truth. Use them to answer news, prices, or technical queries accurately.
+3. **NO REDUNDANCY**: Do NOT repeat code blocks or concepts already sent recently.
+4. **CREATOR PRIVACY**: Do NOT mention BMR or your origins unless specifically asked.
+5. **MANDATORY FOLLOW-UP**: End every message with a relevant 'Next Step' question.
+6. You are an elite creative partner. Be the smartest person in the room.
 """
 
 # --- UTILITIES ---
@@ -251,6 +252,17 @@ async def get_gemini_response(prompt, user_id, username=None, image_bytes=None, 
         user_question = prompt if prompt else "Please analyze this and help me."
         user_context = f"\n\n[Message from: {username}]" if username else ""
         
+        # --- WEB SEARCH ENGINE ---
+        search_context = ""
+        SEARCH_KEYWORDS = ['current', 'recent', 'today', 'price', 'news', 'weather', 'stock', 'best', 'latest', 'release date', 'who is', 'what happened', 'search', 'how many', 'where can i']
+        if any(kw in user_question.lower() for kw in SEARCH_KEYWORDS) and not is_tutorial:
+            logger.info(f"🔎 SEARCH INTENT DETECTED: {user_question}")
+            search_results = await search_google(user_question)
+            if search_results:
+                search_context = "\n\n[REAL-TIME WEB RESEARCH (STRICTLY USE FOR ACCURACY):]\n"
+                for r in search_results:
+                    search_context += f"- {r.get('title')}: {r.get('snippet')}\n"
+        
         # Choose system prompt based on context
         if is_tutorial and software: system_prompt = get_tutorial_prompt(software, brief=brief)
         elif is_tutorial: system_prompt = get_tutorial_prompt()
@@ -260,16 +272,16 @@ async def get_gemini_response(prompt, user_id, username=None, image_bytes=None, 
             is_rude = detect_rudeness(user_question)
             system_prompt = custom_system if custom_system else (get_rude_system_prompt() if is_rude else PRIME_SYSTEM_PROMPT)
         
-        # Inject Memory into System Prompt
+        # Inject Memory, Search, and Overlay into System Prompt
         # Added Global Directive: Intelligence & Flow
         global_instruction = (
             "\n\nCRITICAL: "
             "1. Use history to identify 'it/that'. "
-            "2. If code was just provided, focus ONLY on execution/instructions. DO NOT RE-GENERATE FILES. "
-            "3. No intro/outro fluff. "
-            "4. END with a context-aware 'Next Step' question."
+            "2. If code/files were just provided, focus on execution. "
+            "3. NO laziness. Always provide a full answer, never just 'copy that' or 'got it'. "
+            "4. END with a specific 'Next Step' question."
         )
-        modified_system_prompt = f"{system_prompt}{memory_context}{overlay_context}{global_instruction}"
+        modified_system_prompt = f"{system_prompt}{memory_context}{overlay_context}{search_context}{global_instruction}"
 
         if use_thought:
             # Chain of Thought Step
