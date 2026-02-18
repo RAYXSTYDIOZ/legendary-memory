@@ -290,12 +290,14 @@ async def get_gemini_response(prompt, user_id, username=None, image_bytes=None, 
             return result_text
         
         # --- ROUTING LOGIC: Groq vs Gemini ---
-        # Groq handles general chat (fast, cheap), Gemini handles specialized tasks (vision, tutorials, modes)
-        is_specialized = model is not None or mode is not None or is_tutorial or use_thought
+        # Groq handles general chat and tutorials (fast, high rate limits).
+        # Gemini handles multimodal (vision), specialized thinking, or specific model overrides.
+        is_vision = image_bytes is not None
+        is_override = model is not None or mode is not None or use_thought
         
         history = db_manager.get_history(user_id, limit=12)
         
-        if not is_specialized and GROQ_API_KEY:
+        if not is_vision and not is_override and GROQ_API_KEY:
             # ROUTE TO GROQ (CHAT)
             logger.info(f"🚀 ROUTING TO GROQ: {username or 'User'}")
             
@@ -320,10 +322,14 @@ async def get_gemini_response(prompt, user_id, username=None, image_bytes=None, 
                         db_manager.save_message(user_id, "model", result_text)
                         asyncio.create_task(reflect_on_user(user_id, username, user_question, result_text))
                         return result_text
+                    elif g_res.status_code == 429:
+                        logger.warning("⚠️ Groq Rate Limited. Falling back to Gemini.")
+                    else:
+                        logger.error(f"Groq API Error {g_res.status_code}: {g_res.text}")
                 except Exception as e:
-                    logger.error(f"Groq Chat Failed: {e}")
+                    logger.error(f"Groq Request failed: {e}")
 
-            logger.warning("⚠️ Groq unavailable, falling back to Gemini.")
+            logger.warning("⚠️ Groq unavailable or limited, falling back to Gemini.")
 
         # --- GEMINI FALLBACK/DEFAULT ---
         contents = [types.Part.from_text(text=modified_system_prompt + user_context)]
