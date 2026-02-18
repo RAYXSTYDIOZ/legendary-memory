@@ -483,3 +483,68 @@ async def search_images_google(query):
     except Exception as e:
         logger.error(f"Google image search error: {e}")
     return []
+
+async def get_youtube_stats(channel_name):
+    """Fetch real-time YouTube channel statistics using the Google YouTube Data API."""
+    api_key = os.getenv("YOUTUBE_API_KEY")
+    if not api_key:
+        logger.warning("No YOUTUBE_API_KEY found in environment.")
+        return None
+    
+    # 1. Search for the channel to get its ID
+    search_url = "https://www.googleapis.com/youtube/v3/search"
+    search_params = {
+        'part': 'snippet',
+        'q': channel_name,
+        'type': 'channel',
+        'maxResults': 1,
+        'key': api_key
+    }
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(search_url, params=search_params) as response:
+                if response.status != 200:
+                    logger.error(f"YouTube Search API error: {response.status}")
+                    return None
+                    
+                search_data = await response.json()
+                items = search_data.get('items', [])
+                if not items:
+                    return None
+                
+                channel_id = items[0]['id']['channelId']
+                
+                # 2. Get detailed stats for this channel ID
+                stats_url = "https://www.googleapis.com/youtube/v3/channels"
+                stats_params = {
+                    'part': 'statistics,snippet',
+                    'id': channel_id,
+                    'key': api_key
+                }
+                
+                async with session.get(stats_url, params=stats_params) as stats_response:
+                    if stats_response.status != 200:
+                        return None
+                        
+                    stats_data = await stats_response.json()
+                    if not stats_data.get('items'):
+                        return None
+                    
+                    full_data = stats_data['items'][0]
+                    stats = full_data['statistics']
+                    snippet = full_data['snippet']
+                    
+                    return {
+                        'name': snippet['title'],
+                        'custom_url': snippet.get('customUrl', 'N/A'),
+                        'pfp': snippet['thumbnails']['high']['url'],
+                        'subs': stats.get('subscriberCount', '0'),
+                        'views': stats.get('viewCount', '0'),
+                        'videos': stats.get('videoCount', '0'),
+                        'description': snippet.get('description', '')[:200] + "...",
+                        'id': channel_id
+                    }
+    except Exception as e:
+        logger.error(f"YouTube Stats Error: {e}")
+        return None

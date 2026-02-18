@@ -3795,6 +3795,36 @@ async def on_message(message):
                 await message.reply(f"❌ Couldn't find images for '{search_query}'")
                 return
         
+        # *** YOUTUBE STATS - PRIORITY #2.5 ***
+        if ('stats' in prompt_lower and ('yt' in prompt_lower or 'youtube' in prompt_lower or 'channel' in prompt_lower)):
+            # Extract channel name
+            clean_prompt = message.content.replace(f'<@{bot.user.id}>', '').strip()
+            # Try to match patterns like "stats of yt channel [name]" or "yt stats [name]"
+            channel_match = re.search(r'(?:channel|stats of|yt|youtube|for)\s+([a-zA-Z0-9_-]+)$', clean_prompt, re.IGNORECASE)
+            
+            if channel_match:
+                channel_name = channel_match.group(1)
+                async with message.channel.typing():
+                    try:
+                        stats = await brain.get_youtube_stats(channel_name)
+                        if stats:
+                            embed = discord.Embed(
+                                title=f"📈 YouTube Stats: {stats['name']}",
+                                description=stats['description'],
+                                url=f"https://youtube.com/{stats['custom_url']}" if stats['custom_url'] != 'N/A' else f"https://youtube.com/channel/{stats['id']}",
+                                color=0xFF0000 # YouTube Red
+                            )
+                            embed.set_thumbnail(url=stats['pfp'])
+                            embed.add_field(name="👥 Subscribers", value=f"{int(stats['subs']):,}", inline=True)
+                            embed.add_field(name="👁️ Total Views", value=f"{int(stats['views']):,}", inline=True)
+                            embed.add_field(name="🎥 Videos", value=f"{int(stats['videos']):,}", inline=True)
+                            embed.set_footer(text=f"Channel ID: {stats['id']} • Prime Data Engine")
+                            
+                            await message.channel.send(embed=embed)
+                            return
+                    except Exception as e:
+                        logger.error(f"YT Stats Error: {str(e)}")
+        
         # NOW handle other messages
         is_dm = isinstance(message.channel, discord.DMChannel)
         is_dm_message = is_dm
