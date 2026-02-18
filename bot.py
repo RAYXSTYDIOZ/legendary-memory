@@ -3868,13 +3868,16 @@ async def on_message(message):
         if has_search_word and any(kw in prompt_lower for kw in video_keywords):
             # Extract search query
             search_query = None
-            for word in ['gimme', 'give', 'send', 'get', 'find', 'show', 'search']:
+            clean_text = message.content.replace(f'<@{bot.user.id}>', '').strip()
+            for word in ['gimme', 'give me', 'send me', 'get me', 'find me', 'show me', 'find', 'search', 'get', 'show']:
                 if word in prompt_lower:
                     idx = prompt_lower.find(word)
-                    rest = prompt_lower[idx + len(word):].strip()
-                    if rest.startswith('me'): rest = rest[2:].strip()
-                    if rest:
-                        search_query = rest
+                    rest = clean_text[idx + len(word):].strip()
+                    if rest.lower().startswith('me'): rest = rest[2:].strip()
+                    # Filter out generic words like "yt" or "youtube" from the query itself
+                    final_query = re.sub(r'^(?:yt|youtube)\s+', '', rest, flags=re.IGNORECASE).strip()
+                    if final_query:
+                        search_query = final_query
                         break
             
             if search_query:
@@ -3893,15 +3896,29 @@ async def on_message(message):
                 await message.reply(f"❌ Couldn't find any videos for '{search_query}'.")
                 return
 
-        # *** YOUTUBE STATS - PRIORITY #2.5 ***
-        if ('stats' in prompt_lower and ('yt' in prompt_lower or 'youtube' in prompt_lower or 'channel' in prompt_lower)):
+        # *** YOUTUBE STATS/ANALYTICS - PRIORITY #2.5 ***
+        yt_stat_keywords = ['stats', 'analytics', 'subs', 'subscribers', 'views', 'subscriber', 'chanel', 'channel info']
+        is_yt_stat_request = any(kw in prompt_lower for kw in yt_stat_keywords) and ('yt' in prompt_lower or 'youtube' in prompt_lower or 'channel' in prompt_lower or 'chanel' in prompt_lower)
+        
+        # Also catch follow-ups like "ahh mb [name]" or just a channel name after asking for stats
+        is_correction = False
+        if not is_yt_stat_request:
+            history = [m async for m in message.channel.history(limit=5)]
+            last_bot_msg = next((m for m in history if m.author == bot.user), None)
+            if last_bot_msg and ("YouTube Stats" in last_bot_msg.content or "stats" in last_bot_msg.content.lower() or "analytics" in last_bot_msg.content.lower()):
+                # If current message is just a single word or "mb [name]", treat as correction
+                if len(message.content.split()) <= 3:
+                    is_correction = True
+
+        if is_yt_stat_request or is_correction:
             # Extract channel name
             clean_prompt = message.content.replace(f'<@{bot.user.id}>', '').strip()
-            # Try to match patterns like "stats of yt channel [name]" or "yt stats [name]"
-            channel_match = re.search(r'(?:channel|stats of|yt|youtube|for)\s+([a-zA-Z0-9_-]+)$', clean_prompt, re.IGNORECASE)
+            # Robust regex for name extraction
+            channel_match = re.search(r'(?:channel|stats of|yt|youtube|for|analytics|of|mb)\s+([a-zA-Z0-9_-]+)$', clean_prompt, re.IGNORECASE)
+            # If no pattern but it's a correction, take the last word
+            channel_name = channel_match.group(1) if channel_match else (clean_prompt.split()[-1] if is_correction else None)
             
-            if channel_match:
-                channel_name = channel_match.group(1)
+            if channel_name:
                 async with message.channel.typing():
                     try:
                         stats = await brain.get_youtube_stats(channel_name)
@@ -3910,13 +3927,13 @@ async def on_message(message):
                                 title=f"📈 YouTube Stats: {stats['name']}",
                                 description=stats['description'],
                                 url=f"https://youtube.com/{stats['custom_url']}" if stats['custom_url'] != 'N/A' else f"https://youtube.com/channel/{stats['id']}",
-                                color=0xFF0000 # YouTube Red
+                                color=0xFF0000 
                             )
                             embed.set_thumbnail(url=stats['pfp'])
                             embed.add_field(name="👥 Subscribers", value=f"{int(stats['subs']):,}", inline=True)
                             embed.add_field(name="👁️ Total Views", value=f"{int(stats['views']):,}", inline=True)
                             embed.add_field(name="🎥 Videos", value=f"{int(stats['videos']):,}", inline=True)
-                            embed.set_footer(text=f"Channel ID: {stats['id']} • Prime Data Engine")
+                            embed.set_footer(text=f"Channel ID: {stats['id']} • Prime Live Data")
                             
                             await message.channel.send(embed=embed)
                             return
