@@ -1188,24 +1188,27 @@ async def handle_automatic_resources(message):
                 search_query = search_query.replace('"', '').replace("'", "") # Clean quotes
                 
                 # --- AUTO-FILE DELIVERY (Proactive) ---
-                # If it's an image-style asset, try to find/generate and send it directly
-                is_file_asset = any(kw in search_query.lower() for kw in ['png', 'jpg', 'image', 'picture', 'art', 'cloud', 'smoke', 'fire', 'flare', 'overlay', 'texture', 'asset', 'background'])
+                # If it's an image or sfx asset, try to find/generate and send it directly
+                is_img_asset = any(kw in search_query.lower() for kw in ['png', 'jpg', 'image', 'picture', 'art', 'cloud', 'smoke', 'fire', 'flare', 'overlay', 'texture', 'asset', 'background'])
+                is_sfx_asset = any(kw in search_query.lower() for kw in ['sfx', 'sound', 'audio', 'mp3', 'wav', 'noise', 'effect'])
                 
-                if is_file_asset:
-                    image_path = None
-                    is_atmospheric = any(kw in search_query.lower() for kw in ['cloud', 'fire', 'smoke', 'flare', 'light', 'sky', 'stars', 'galaxy'])
+                if is_img_asset or is_sfx_asset:
+                    file_path = None
+                    if is_img_asset:
+                        is_atmospheric = any(kw in search_query.lower() for kw in ['cloud', 'fire', 'smoke', 'flare', 'light', 'sky', 'stars', 'galaxy'])
+                        if is_atmospheric:
+                            file_path = await generate_image(f"{search_query} high quality isolated on transparent-ready black background")
+                        
+                        if not file_path:
+                            file_path = await search_and_download_image(search_query)
                     
-                    if is_atmospheric:
-                        image_path = await generate_image(f"{search_query} high quality isolated on transparent-ready black background")
+                    elif is_sfx_asset:
+                        file_path = await search_and_download_audio(search_query)
                     
-                    # Fallback to search if generation failed or wasn't atmospheric
-                    if not image_path:
-                        image_path = await search_and_download_image(search_query)
-                    
-                    if image_path and os.path.exists(image_path):
+                    if file_path and os.path.exists(file_path):
                         await status_msg.edit(content=f"✅ **Found it.** Fulfilling your request for **{search_query}**.")
-                        await message.reply(content=f"here's the **{search_query}** asset you needed. hope it hits.", file=discord.File(image_path), view=FindMoreImageView(search_query))
-                        try: os.remove(image_path)
+                        await message.reply(content=f"here's the **{search_query}** asset you needed. hope it hits.", file=discord.File(file_path), view=FindMoreImageView(search_query))
+                        try: os.remove(file_path)
                         except: pass
                         return True
 
@@ -2115,6 +2118,55 @@ async def search_and_download_image(query: str, limit: int = 1):
         
     except Exception as e:
         logger.error(f"Error downloading image: {str(e)}")
+        return None
+
+async def search_and_download_audio(query: str):
+    """Search for audio/SFX files using Google Search and direct downloads."""
+    try:
+        import tempfile
+        import aiohttp
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        # Method 1: Target MyInstants specifically for SFX
+        try:
+            search_query = f"site:myinstants.com {query} mp3"
+            logger.info(f"Trying MyInstants Search for SFX: {query}")
+            search_results = await brain.search_google(search_query)
+            
+            if search_results:
+                async with aiohttp.ClientSession() as session:
+                    for result in search_results:
+                        page_url = result.get('link')
+                        if not page_url: continue
+                        
+                        # Fetch page to find the mp3 link
+                        async with session.get(page_url, headers=headers, timeout=10) as page_res:
+                            if page_res.status == 200:
+                                page_html = await page_res.text()
+                                # Patterns common for mp3 links on myinstants
+                                mp3_match = re.search(r'https?://[^\s<>"]+\.mp3', page_html)
+                                if mp3_match:
+                                    download_url = mp3_match.group(0)
+                                    logger.info(f"Found SFX Download URL: {download_url}")
+                                    
+                                    async with session.get(download_url, headers=headers, timeout=15) as res:
+                                        if res.status == 200:
+                                            content = await res.read()
+                                            if len(content) > 1000:
+                                                temp_file = tempfile.NamedTemporaryFile(suffix='.mp3', delete=False)
+                                                temp_file.write(content)
+                                                temp_file.close()
+                                                logger.info(f"✓ Downloaded SFX from {download_url}")
+                                                return temp_file.name
+        except Exception as e:
+            logger.warning(f"SFX search failed: {str(e)}")
+            
+        return None
+    except Exception as e:
+        logger.error(f"Global SFX search error: {str(e)}")
         return None
 
 async def generate_image(description: str):
@@ -3386,21 +3438,24 @@ async def on_command_error(ctx, error):
 async def on_message(message):
     """Handle all messages, including those that aren't commands."""
     # --- HYPE TRAIN DETECTION ---
-    global hype_active, hype_end_time, hype_messages
-    now = datetime.now(timezone.utc)
-    hype_messages.append(now)
-    # Filter only last 60 seconds
-    hype_messages = [t for t in hype_messages if (now - t).total_seconds() < 60]
-    
-    if len(hype_messages) > 15 and not hype_active:
-        hype_active = True
-        hype_end_time = now + timedelta(minutes=10)
-        await message.channel.send("🔥 **HYPE TRAIN DETECTED!** 🔥\nChat is peaking! **2x XP** is now active for 10 minutes!")
-        logger.info(f"Hype Train triggered in {message.guild.name}")
-    
-    if hype_active and now > hype_end_time:
-        hype_active = False
-        await message.channel.send("🏁 **Hype Train has reached the station.** 2x XP is now over.")
+    if not message.guild:
+        pass
+    else:
+        global hype_active, hype_end_time, hype_messages
+        now = datetime.now(timezone.utc)
+        hype_messages.append(now)
+        # Filter only last 60 seconds
+        hype_messages = [t for t in hype_messages if (now - t).total_seconds() < 60]
+        
+        if len(hype_messages) > 15 and not hype_active:
+            hype_active = True
+            hype_end_time = now + timedelta(minutes=10)
+            await message.channel.send("🔥 **HYPE TRAIN DETECTED!** 🔥\nChat is peaking! **2x XP** is now active for 10 minutes!")
+            logger.info(f"Hype Train triggered in {message.guild.name}")
+        
+        if hype_active and now > hype_end_time:
+            hype_active = False
+            await message.channel.send("🏁 **Hype Train has reached the station.** 2x XP is now over.")
 
     # --- SECRET CHAT LOGGING ---
     # Only log interactions with the bot (DMs, Mentions, Replies to bot, or Bot's own replies)
