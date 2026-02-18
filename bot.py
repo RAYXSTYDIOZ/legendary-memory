@@ -3870,18 +3870,7 @@ async def on_message(message):
                     await message.channel.send(f"{target_to_roast.mention} {response}")
                 return
         
-        # Check if user is asking for an image or video
-        is_image_request = any(keyword in prompt_lower for keyword in ['send me', 'get me', 'find me', 'show me', 'give me', 'image', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'picture', 'photo', 'screenshot'])
-        search_query = None
-        if is_image_request:
-            # Try to extract what they want
-            if 'send me' in prompt_lower or 'get me' in prompt_lower or 'find me' in prompt_lower or 'show me' in prompt_lower or 'give me' in prompt_lower:
-                parts = message.content.split()
-                for i, part in enumerate(parts):
-                    if part.lower() in ['send', 'get', 'find', 'show', 'give']:
-                        if i+1 < len(parts) and parts[i+1].lower() == 'me':
-                            search_query = ' '.join(parts[i+2:]) if i+2 < len(parts) else None
-                            break
+        search_query = None # Reset search query for standard processing
         
         try:
             # Get clean prompt (remove mention if exists)
@@ -3927,26 +3916,7 @@ async def on_message(message):
             
             # Show typing indicator while processing
             async with message.channel.typing():
-                if is_image_request and search_query and not image_bytes and not video_bytes:
-                    # Search and download image
-                    image_path = await search_and_download_image(search_query, limit=1)
-                    if image_path and os.path.exists(image_path):
-                        try:
-                            # Send the image to user's DMs
-                            await message.author.send(f"Here's a **{search_query}** for you:", 
-                                                    file=discord.File(image_path))
-                            if message.guild:
-                                await message.channel.send(f"{message.author.mention}, I've sent you the image in your DMs!")
-                            logger.info(f'Sent image for "{search_query}" to {message.author.name}')
-                            return
-                        except Exception as e:
-                            logger.error(f"Error sending image: {str(e)}")
-                            await message.reply(f"❌ Couldn't send the image. Error: {str(e)}")
-                            return
-                    else:
-                        await message.reply(f"❌ Couldn't find an image for '{search_query}'. Try a different search term!")
-                        return
-                elif is_video and video_bytes:
+                if is_video and video_bytes:
                     # Analyze video
                     response = await analyze_video(video_bytes, video_filename, message.author.id)
                 elif image_bytes:
@@ -3984,7 +3954,7 @@ async def on_message(message):
                         async with message.channel.typing():
                             img_path = await generate_image(prompt_val)
                             if img_path and os.path.exists(img_path):
-                                await message.reply(content=f"fulfilled your request. found/created this **{prompt_val}** for you.", file=discord.File(img_path))
+                                await message.reply(content=f"fulfilled your request. found/created this **{prompt_val}** for you.", file=discord.File(img_path), view=FindMoreImageView(prompt_val))
                                 try: os.remove(img_path)
                                 except: pass
                                 tool_executed = True

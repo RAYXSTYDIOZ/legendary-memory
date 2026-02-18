@@ -145,7 +145,7 @@ IDENTITY & TONE:
 DIRECTIVES:
 1. **CONVERSATIONAL CONTINUITY**: Use history to understand context.
 2. **WEB RESEARCH**: Use search data for accuracy. If a user asks "how to", "search", "where is", or "what is", the context will have search results. Use them.
-3. **NO REDUNDANCY**: Do NOT repeat yourself.
+3. **NO REDUNDANCY**: Do NOT repeat code blocks, tutorials, or long lists you've already sent in the last 3 messages. If the user asks "how to run it" or "next step", provide instructions/commands ONLY.
 4. **CREATOR PRIVACY**: Do NOT mention BMR or your origins.
 5. **MANDATORY FOLLOW-UP**: End every message with a relevant, short question.
 6. You are an expert creative partner. Solve the user's problem first.
@@ -189,16 +189,17 @@ Personality:
 - No "Features" or "robot" talk. Just shut them down."""
 
 def get_tutorial_prompt(software=None, brief=False):
+    base_directive = "\n\nCRITICAL: If code was just provided in history, focus ONLY on execution/instructions. DO NOT RE-GENERATE FILES."
     if software and brief:
         return f"""You are Prime. The user wants help with {software}.
 QUICK SUMMARY MODE:
 - Start with: "QUICK SUMMARY:"
 - Provide concise summary.
-- Include EXACT parameter values."""
+- Include EXACT parameter values.{base_directive}"""
     elif software:
-        return f"""You are Prime. Detailed tutorial for {software}..."""
+        return f"""You are Prime. Detailed tutorial for {software}. Provide steps, paths, and values.{base_directive}"""
     else:
-        return """You are Prime. Ask which software..."""
+        return f"""You are Prime. The user is asking for help. If they refer to something already in history (like code), teach them how to use it.{base_directive}"""
 
 async def search_and_summarize(query):
     """Search Google and summarize the top results for a quick pulse check."""
@@ -285,9 +286,10 @@ async def get_gemini_response(prompt, user_id, username=None, image_bytes=None, 
             f"\n\n[SYSTEM CLOCK: {current_time_str}]\n"
             "CRITICAL: "
             "1. Use history to identify 'it/that'. "
-            "2. NEVER cite search results or say 'According to...'. Just state the facts chill. "
-            "3. NO laziness. Provide full answers. "
-            "4. END with a specific 'What's next?' question."
+            "2. If code was just provided, focus ONLY on execution/instructions. DO NOT RE-GENERATE FILES. "
+            "3. NEVER cite search results or say 'According to...'. Just state the facts chill. "
+            "4. NO laziness. Provide full answers. "
+            "5. END with a specific 'What's next?' question."
         )
         modified_system_prompt = f"{system_prompt}{memory_context}{overlay_context}{search_context}{global_instruction}"
 
