@@ -3809,9 +3809,6 @@ async def on_message(message):
                     async with message.channel.typing():
                         response = await get_gemini_response(prompt_lower, user_id, username=message.author.name, is_tutorial=True, software=mentioned_software, brief=True, model="gemini-1.5-flash", guild_id=message.guild.id if message.guild else None)
                     
-                    if response and not response.strip().endswith('?'):
-                        response = response.strip() + "\n\nWant a detailed step-by-step explanation?"
-                    
                     if response and len(response.strip()) > 20:
                         await message.reply(response)
                         logger.info(f"Sent direct tutorial to {message.author.name}")
