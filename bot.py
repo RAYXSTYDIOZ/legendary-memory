@@ -3817,6 +3817,38 @@ async def on_message(message):
     if not message.content.startswith('!'):
         prompt_lower = message.content.lower()
         
+        # *** PROJECT ARCHITECT (AUTO-ZIP) - PRIORITY #0.5 ***
+        architect_keywords = ['project', 'app', 'website', 'repository', 'zip', 'framework', 'system']
+        if any(w in prompt_lower for w in ['build', 'architect', 'generate', 'make']) and any(kw in prompt_lower for kw in architect_keywords):
+            async with message.channel.typing():
+                try:
+                    project_desc = message.content.replace(f'<@{bot.user.id}>', '').strip()
+                    prompt = f"ARCHITECT MODE: Build a full multi-file project for: '{project_desc}'. Provide the output as a SINGLE JSON object where keys are filenames and values are the file contents. Wrap it in ```json blocks."
+                    response = await get_gemini_response(prompt, user_id, username=message.author.name, guild_id=message.guild.id if message.guild else None)
+                    
+                    json_match = re.search(r'```json\s*(\{.*?\})\s*```', response, re.DOTALL)
+                    if not json_match:
+                        # Fallback to chat
+                        pass
+                    else:
+                        project_data = json.loads(json_match.group(1))
+                        zip_buffer = io.BytesIO()
+                        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                            for filename, content in project_data.items():
+                                zip_file.writestr(filename, content)
+                        
+                        zip_buffer.seek(0)
+                        embed = discord.Embed(
+                            title="📦 PROJECT ARCHITECTED",
+                            description=f"Successfully built the framework for: **{project_desc}**.\n\nFiles generated: " + ", ".join([f"`{f}`" for f in project_data.keys()]),
+                            color=0x00FFB4
+                        )
+                        embed.set_footer(text="Prime | Project Blueprint")
+                        await message.reply(embed=embed, file=discord.File(fp=zip_buffer, filename=f"project_{os.urandom(2).hex()}.zip"))
+                        return
+                except Exception as e:
+                    logger.error(f"Auto-Architect Error: {e}")
+
         # *** IMAGE GENERATION - PRIORITY #1 ***
         if ('generat' in prompt_lower or 'creat' in prompt_lower or 'draw' in prompt_lower or 'make' in prompt_lower) and ('img' in prompt_lower or 'image' in prompt_lower or 'picture' in prompt_lower or 'photo' in prompt_lower or 'art' in prompt_lower):
             prompt = message.content.replace(f'<@{bot.user.id}>', '').strip()
@@ -4007,6 +4039,27 @@ async def on_message(message):
                     return
                 except Exception as e:
                     logger.error(f"Decision Architect Error: {e}")
+
+        # *** INTELLIGENCE SCOUT - PRIORITY #2.17 ***
+        intel_triggers = ['leak', 'insider info', 'whispers', 'intel', 'scout info', 'research leak']
+        if any(kw in prompt_lower for kw in intel_triggers) and not message.content.startswith('!'):
+            async with message.channel.typing():
+                try:
+                    query = message.content.replace(f'<@{bot.user.id}>', '').strip()
+                    prompt = f"INTELLIGENCE SCOUT: Scour the latest whispers, GitHub commits, and community leaks for: '{query}'. Provide a high-intelligence report with the most likely upcoming features or data."
+                    response = await get_gemini_response(prompt, user_id, username=message.author.name, guild_id=message.guild.id if message.guild else None)
+                    
+                    embed = discord.Embed(
+                        title=f"🛰️ INTELLIGENCE REPORT: {query.upper()}",
+                        description=response[:4000],
+                        color=0x00FFB4,
+                        timestamp=datetime.now(timezone.utc)
+                    )
+                    embed.set_footer(text="Prime Intelligence • Global Leak Scouter")
+                    await message.reply(embed=embed)
+                    return
+                except Exception as e:
+                    logger.error(f"Auto-Intel Error: {e}")
         
         # *** YOUTUBE VIDEO SEARCH - PRIORITY #2.6 ***
         video_keywords = ['video', 'song', 'music', 'track', 'phonk', 'beat', 'clip', 'youtube', 'yt', 'ep', 'episode', 'series', 'part', 'movie']
@@ -7074,74 +7127,6 @@ async def expression_sandbox(ctx, *, expression: str = None):
             embed.set_footer(text="Prime | AE Sandbox")
             await ctx.send(embed=embed)
         except Exception as e:
-            await ctx.send(BOT_ERROR_MSG)
-
-@bot.command(name="architect")
-async def architect_command(ctx, *, project_desc: str = None):
-    """Autonomous Project Zipping. Build full applications and get a ZIP."""
-    if not project_desc:
-        await ctx.send("🏗️ **Usage**: `!architect [project description]` (e.g., !architect simple landing page with dark mode)")
-        return
-    
-    async with ctx.typing():
-        try:
-            prompt = f"ARCHITECT MODE: Build a full multi-file project for: '{project_desc}'. Provide the output as a SINGLE JSON object where keys are filenames and values are the file contents. Wrap it in ```json blocks."
-            response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name, guild_id=ctx.guild.id if ctx.guild else None)
-            
-            # Extract JSON
-            json_match = re.search(r'```json\s*(\{.*?\})\s*```', response, re.DOTALL)
-            if not json_match:
-                # Fallback: maybe just regular code block with one file?
-                await ctx.send(response[:2000])
-                return
-            
-            project_data = json.loads(json_match.group(1))
-            
-            # Create ZIP
-            zip_buffer = io.BytesIO()
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                for filename, content in project_data.items():
-                    # Handle if filename has path separators
-                    zip_file.writestr(filename, content)
-            
-            zip_buffer.seek(0)
-            
-            embed = discord.Embed(
-                title="📦 PROJECT ARCHITECTED",
-                description=f"Successfully built the framework for: **{project_desc}**.\n\nFiles generated: " + ", ".join([f"`{f}`" for f in project_data.keys()]),
-                color=0x00FFB4
-            )
-            embed.set_footer(text="Prime | Project Blueprint")
-            
-            await ctx.send(embed=embed, file=discord.File(fp=zip_buffer, filename=f"project_{os.urandom(2).hex()}.zip"))
-            
-        except Exception as e:
-            logger.error(f"Architect Error: {e}")
-            await ctx.send(f"❌ **Architect Error**: Failed to compile the repository. (Check if your prompt is too complex)")
-
-@bot.command(name="intel")
-async def intelligence_scout(ctx, *, query: str = None):
-    """Deep Intelligence Scouting. Find leaks, whispers, and insider info."""
-    if not query:
-        await ctx.send("🛰️ **Usage**: `!intel [leak/topic]` (e.g., !intel After Effects 2026 features)")
-        return
-    
-    async with ctx.typing():
-        try:
-            # Use Intel Scout directive logic
-            prompt = f"INTELLIGENCE SCOUT: Scour the latest whispers, GitHub commits, and community leaks for: '{query}'. Provide a high-intelligence report with the most likely upcoming features or data."
-            response = await get_gemini_response(prompt, ctx.author.id, username=ctx.author.name, guild_id=ctx.guild.id if ctx.guild else None)
-            
-            embed = discord.Embed(
-                title=f"🛰️ INTELLIGENCE REPORT: {query.upper()}",
-                description=response[:4000],
-                color=0x00FFB4,
-                timestamp=datetime.now(timezone.utc)
-            )
-            embed.set_footer(text="Prime | Global Intelligence Harvest")
-            await ctx.send(embed=embed)
-        except Exception as e:
-            logger.error(f"Intel Error: {e}")
             await ctx.send(BOT_ERROR_MSG)
 
 @bot.command(name="override")
