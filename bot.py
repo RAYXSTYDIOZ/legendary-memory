@@ -3872,9 +3872,22 @@ async def on_message(message):
         
         if (is_pfp_req or is_stat_req) and any(verb in prompt_lower for verb in ['show', 'get', 'give', 'send', 'view', 'what is', 'who is']):
             target_user = message.author
+            
+            # 1. Check for mentions
             if message.mentions:
                 mentions = [u for u in message.mentions if u.id != bot.user.id]
                 if mentions: target_user = mentions[0]
+            
+            # 2. Check for raw User ID in the message (17-20 digits)
+            else:
+                id_match = re.search(r'(\d{17,20})', message.content)
+                if id_match:
+                    try:
+                        fetched_user = await bot.fetch_user(int(id_match.group(1)))
+                        if fetched_user:
+                            target_user = fetched_user
+                    except:
+                        pass # Valid ID but user not found/private
             
             async with message.channel.typing():
                 try:
