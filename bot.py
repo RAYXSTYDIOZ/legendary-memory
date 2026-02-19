@@ -1170,8 +1170,8 @@ async def handle_automatic_resources(message):
             
         prompt_lower = message.content.lower()
         # Expanded triggers and keywords for more intelligent proactive detection
-        resource_triggers = ['where to get', 'where can i get', 'where can i find', 'where to find', 'looking for', 'any good', 'is there a', 'need some', 'anyone got', 'get me', 'send me', 'find me', 'i need', 'i want', 'can someone send', 'anyone have', 'send over', 'gimme', 'is there a', 'looking for a', 'any', 'suggest', 'provide', 'send', 'get', 'need', 'give']
-        resource_keywords = ['sfx', 'overlay', 'preset', 'font', 'texture', 'lut', 'vfx', 'pack', 'cc', 'brush', 'plugin', 'shake', 'quality', 'png', 'jpg', 'jpeg', 'image', 'img', 'asset', 'stock', 'clip', 'video', 'background', 'cloud', 'smoke', 'fire', 'flare', 'dust', 'grain', 'particles', 'light', 'leak', 'sound effect', 'overlay', 'background', 'gfx', 'liquid', 'glitch', 'paper', 'dust']
+        resource_triggers = ['where to get', 'where can i get', 'where can i find', 'where to find', 'looking for', 'any good', 'is there a', 'need some', 'anyone got', 'get me', 'send me', 'find me', 'i need', 'i want', 'can someone send', 'anyone have', 'send over', 'gimme', 'is there a', 'looking for a', 'any', 'suggest', 'provide', 'send', 'get', 'need', 'give', 'link', 'sound']
+        resource_keywords = ['sfx', 'overlay', 'preset', 'font', 'texture', 'lut', 'vfx', 'pack', 'cc', 'brush', 'plugin', 'shake', 'quality', 'png', 'jpg', 'jpeg', 'image', 'img', 'asset', 'stock', 'clip', 'video', 'background', 'cloud', 'smoke', 'fire', 'flare', 'dust', 'grain', 'particles', 'light', 'leak', 'sound effect', 'overlay', 'background', 'gfx', 'liquid', 'glitch', 'paper', 'dust', 'mp3', 'mp4', 'mkv', 'wav']
         
         has_trigger = any(trigger in prompt_lower for trigger in resource_triggers)
         has_keyword = any(kw in prompt_lower for kw in resource_keywords)
@@ -3773,9 +3773,9 @@ async def on_message(message):
     # if await handle_automatic_media_review(message):
     #     return
         
-    # Trigger AI resource suggestions automatically
-    # if await handle_automatic_resources(message):
-    #    return
+    # Trigger AI resource suggestions automatically (SFX, Videos, Images)
+    if await handle_automatic_resources(message):
+        return
 
     # Extra catch: If they are asking for an asset/file but the above didn't catch it
     # if any(kw in message.content.lower() for kw in ['png', 'asset', 'send me', 'give me', 'find me']) and ('cloud' in message.content.lower() or 'overlay' in message.content.lower() or 'sfx' in message.content.lower()):
@@ -3865,7 +3865,7 @@ async def on_message(message):
         
         # *** DISCORD IDENTITY (PFP/Profile) - PRIORITY #2.1 ***
         pfp_keywords = ['pfp', 'avatar', 'profile picture', 'profile pic']
-        stat_keywords = ['stats', 'info', 'profile', 'bio', 'about me', 'discord acc']
+        stat_keywords = ['stats', 'info', 'profile', 'bio', 'about me', 'discord acc', 'prof', 'account']
         
         is_pfp_req = any(kw in prompt_lower for kw in pfp_keywords)
         is_stat_req = any(kw in prompt_lower for kw in stat_keywords)

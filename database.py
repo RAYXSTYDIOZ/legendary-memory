@@ -332,6 +332,18 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error saving level: {e}")
 
+    def get_user_level(self, user_id):
+        p = self.get_placeholder()
+        try:
+            with self.get_connection() as conn:
+                with self.get_cursor(conn) as cursor:
+                    cursor.execute(f'SELECT level FROM user_levels WHERE user_id = {p}', (user_id,))
+                    row = cursor.fetchone()
+                    return row[0] if row else 0
+        except Exception as e:
+            logger.error(f"Error getting user level: {e}")
+            return 0
+
     # --- Warnings ---
     def get_warnings(self):
         try:
