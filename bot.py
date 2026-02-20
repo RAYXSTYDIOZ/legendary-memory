@@ -3819,7 +3819,9 @@ async def on_message(message):
         
         # *** SHADOW COUNCIL (MULTI-AGENT REVIEW) - PRIORITY #0.1 ***
         council_triggers = ['council', 'review', 'deep audit', 'analyze deeply', 'expert opinion', 'shadow council']
-        if any(kw in prompt_lower for kw in council_triggers) or (len(prompt_lower) > 100 and any(w in prompt_lower for w in ['build', 'create', 'design']) and 'insane' in prompt_lower):
+        is_project_req = any(kw in prompt_lower for kw in ['project', 'app', 'website', 'repository', 'system', 'build', 'architect']) and any(w in prompt_lower for w in ['make', 'generate', 'build', 'want', 'need', 'insane'])
+        
+        if any(kw in prompt_lower for kw in council_triggers) or (is_project_req and 'insane' in prompt_lower):
             status_msg = await message.reply("🕵️ **Shadow Council**: Summoning the Architect, Aestheticist, and Strategist...")
             async with message.channel.typing():
                 try:
@@ -3829,17 +3831,26 @@ async def on_message(message):
                         username=message.author.name,
                         guild_id=message.guild.id if message.guild else None
                     )
-                    await status_msg.delete()
-                    await message.reply(analysis)
-                    return
+                    
+                    # Safety check: If Council outputs the JSON project format, redirect to Architect logic
+                    if "```json" in analysis or ("{" in analysis and "index.html" in analysis):
+                        # Delete status and pass through to Architect logic
+                        try: await status_msg.delete()
+                        except: pass
+                        # We'll let the next block handle it by NOT returning here
+                    else:
+                        await status_msg.delete()
+                        await message.reply(analysis)
+                        return
                 except Exception as e:
                     logger.error(f"Council Trigger Error: {e}")
                     try: await status_msg.delete()
                     except: pass
         
         # *** PROJECT ARCHITECT (AUTO-ZIP) - PRIORITY #0.5 ***
-        architect_keywords = ['project', 'app', 'website', 'repository', 'zip', 'framework', 'system']
-        if any(w in prompt_lower for w in ['build', 'architect', 'generate', 'make']) and any(kw in prompt_lower for kw in architect_keywords):
+        architect_keywords = ['project', 'app', 'website', 'repository', 'zip', 'framework', 'system', 'site']
+        architect_verbs = ['build', 'architect', 'generate', 'make', 'want', 'need', 'setup', 'create']
+        if any(v in prompt_lower for v in architect_verbs) and any(kw in prompt_lower for kw in architect_keywords):
             status_msg = await message.reply("🏗️ **Prime Architect**: Designing your system architecture...")
             async with message.channel.typing():
                 try:
