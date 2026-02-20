@@ -124,6 +124,21 @@ def rotate_gemini_key():
 user_states = {}
 user_warnings = db_manager.get_warnings()
 yt_cooldowns = db_manager.get_yt_cooldowns()
+active_captchas = db_manager.get_active_captchas()
+
+# Global Defaults/Thresholds
+VERIFICATION_AGE_THRESHOLD_DAYS = 30
+VERIFIED_ROLE_ID = get_env_int("VERIFIED_ROLE_ID", 0)
+UNVERIFIED_ROLE_ID = get_env_int("UNVERIFIED_ROLE_ID", 0)
+MUTED_ROLE_ID = get_env_int("MUTED_ROLE_ID", 0)
+AE_ROLE_ID = get_env_int("AE_ROLE_ID", 0)
+PR_ROLE_ID = get_env_int("PR_ROLE_ID", 0)
+PS_ROLE_ID = get_env_int("PS_ROLE_ID", 0)
+AM_ROLE_ID = get_env_int("AM_ROLE_ID", 0)
+CAPCUT_ROLE_ID = get_env_int("CAPCUT_ROLE_ID", 0)
+OTHER_EDIT_ROLE_ID = get_env_int("OTHER_EDIT_ROLE_ID", 0)
+YOUTUBER_ROLE_ID = get_env_int("YOUTUBER_ROLE_ID", 0)
+LEGENDARY_ROLE_ID = get_env_int("LEGENDARY_ROLE_ID", 0)
 
 # --- DYNAMIC CONFIGURATION ACCESS ---
 # These functions now take a guild_id to support multi-tenancy
@@ -179,6 +194,11 @@ def save_yt_cooldowns(cooldowns):
 def save_levels(levels_data):
     for uid, data in levels_data.items():
         db_manager.save_level(uid, data['xp'], data['level'])
+
+def save_active_captchas(captchas):
+    for uid, code in captchas.items():
+        db_manager.save_captcha(uid, code)
+
 user_xp_cooldowns = {} # user_id: timestamp
 
 # --- PORTFOLIO SYSTEM STORAGE ---
@@ -2518,10 +2538,14 @@ class CaptchaModal(discord.ui.Modal, title='Verify You Are Human'):
             # Check account age
             acc_age_days = (datetime.now(timezone.utc) - member.created_at).days
             
-            # Use improved role lookup
-            verified_role = get_guild_role(guild, VERIFIED_ROLE_ID, "Verified")
-            muted_role = get_guild_role(guild, MUTED_ROLE_ID, "Muted")
-            unverified_role = get_guild_role(guild, UNVERIFIED_ROLE_ID, "Unverified")
+            # Use improved role lookup with per-guild config
+            v_id = get_verified_role(guild.id)
+            m_id = get_muted_role(guild.id)
+            u_id = get_unverified_role(guild.id)
+            
+            verified_role = get_guild_role(guild, v_id, "Verified")
+            muted_role = get_guild_role(guild, m_id, "Muted")
+            unverified_role = get_guild_role(guild, u_id, "Unverified")
             
             # 1. Remove Unverified role
             if unverified_role:
@@ -2569,7 +2593,7 @@ class CaptchaModal(discord.ui.Modal, title='Verify You Are Human'):
             # Clear captcha
             if interaction.user.id in active_captchas:
                 del active_captchas[interaction.user.id]
-                save_active_captchas(active_captchas)
+                db_manager.delete_captcha(interaction.user.id)
         else:
             await interaction.response.send_message("❌ **Invalid Captcha.** Please try again.", ephemeral=True)
 
@@ -2580,7 +2604,8 @@ class VerifyButtonView(discord.ui.View):
     @discord.ui.button(label="Verify Myself", style=discord.ButtonStyle.success, custom_id="verify_start_btn", emoji="🛡️")
     async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         # 1. Check if user is already verified (by ID or Name)
-        is_verified = any(r.id == VERIFIED_ROLE_ID or r.name.lower() == "verified" for r in interaction.user.roles)
+        v_id = get_verified_role(interaction.guild.id)
+        is_verified = any(r.id == v_id or r.name.lower() == "verified" for r in interaction.user.roles)
         if is_verified:
             await interaction.response.send_message("✅ You are already verified and have full access to the server!", ephemeral=True)
             return
@@ -2588,7 +2613,7 @@ class VerifyButtonView(discord.ui.View):
         # 2. Generate captcha
         code, image_bytes = generate_captcha()
         active_captchas[interaction.user.id] = code
-        save_active_captchas(active_captchas)
+        db_manager.save_captcha(interaction.user.id, code)
         
         file = discord.File(io.BytesIO(image_bytes), filename="captcha.png")
         
@@ -3042,6 +3067,13 @@ async def on_ready():
         logger.info(f'Bot connected as {bot.user.name} (ID: {bot.user.id})')
         logger.info(f'Connected to {len(bot.guilds)} server(s)')
 
+        # Register persistent views (Do this EARLY so interactions don't fail)
+        bot.add_view(SelfRoleView())
+        bot.add_view(RoleRequestView())
+        bot.add_view(VerifyButtonView())
+        bot.add_view(CaptchaEntryView())
+        logger.info("✅ Persistent views registered.")
+
         # Sync slash commands
         try:
             await bot.tree.sync()
@@ -3049,20 +3081,21 @@ async def on_ready():
         except Exception as e:
             logger.error(f"Failed to sync commands: {e}")
 
-        # Start background tasks (Unsolicited messages disabled by default)
-        # if not revive_chat.is_running(): revive_chat.start()
-        # if not daily_insight.is_running(): daily_insight.start()
-        # if not creative_pulse.is_running(): creative_pulse.start()
-        if not check_account_maturity.is_running(): check_account_maturity.start()
+        # Start account maturity check loop
+        if not check_account_maturity.is_running():
+            check_account_maturity.start()
+            logger.info("Account maturity check loop started.")
 
         # Global startup log
-        await log_activity(
-            "🚀 System Online",
-            f"**{bot.user.name}** is active across {len(bot.guilds)} guilds.",
-            color=0x00FF00
-        )
+        try:
+            await log_activity(
+                "🚀 System Online",
+                f"**{bot.user.name}** is active across {len(bot.guilds)} guilds.",
+                color=0x00FF00
+            )
+        except: pass
         
-        # Cycle presence
+        # Cycle presence status
         async def cycle_presence():
             while True:
                 for activity, status in PRESENCE_STATUSES:
@@ -3072,37 +3105,8 @@ async def on_ready():
                     await asyncio.sleep(60) # 60s is better for rate limits
         bot.loop.create_task(cycle_presence())
 
-    except Exception as e:
-        logger.error(f'Error in on_ready: {e}')
-
-        # AutoMod Setup for Badge (runs on startup)
+        # AutoMod Setup
         bot.loop.create_task(setup_all_guilds_automod())
-        
-        # Start account maturity check loop
-        if not check_account_maturity.is_running():
-            check_account_maturity.start()
-            logger.info("Account maturity check loop started.")
-
-        # Start chat revival loop
-        # if not revive_chat.is_running():
-        #     revive_chat.start()
-        #     logger.info("Chat revival loop started.")
-
-        # Start daily insight loop
-        # if not daily_insight.is_running():
-        #     daily_insight.start()
-        #     logger.info("Daily insight loop started.")
-
-        # Start creative pulse loop
-        # if not creative_pulse.is_running():
-        #     creative_pulse.start()
-        #     logger.info("Creative pulse loop started.")
-
-        # Register persistent views
-        bot.add_view(SelfRoleView())
-        bot.add_view(RoleRequestView())
-        bot.add_view(VerifyButtonView())
-        bot.add_view(CaptchaEntryView())
 
     except Exception as e:
         logger.error(f"Fatal error in on_ready: {e}")

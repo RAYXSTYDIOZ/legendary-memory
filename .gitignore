@@ -32,3 +32,6 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# Project folders to ignore
+preset-market/
